@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { nanoid } from 'nanoid'
-import { createGame } from '@/lib/gameActions'
+import { createGame, createTestGame } from '@/lib/gameActions'
 
 export default function Home() {
   const router = useRouter()
@@ -10,7 +10,7 @@ export default function Home() {
   const [joinCode, setJoinCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'home' | 'create' | 'join'>('home')
+  const [mode, setMode] = useState<'home' | 'create' | 'join' | 'test'>('home')
 
   async function handleCreate() {
     if (!nickname.trim()) { setError('Enter a nickname'); return }
@@ -24,6 +24,23 @@ export default function Home() {
       router.push(`/game/${gameId}`)
     } catch (e: any) {
       setError(e.message ?? 'Failed to create game')
+      setLoading(false)
+    }
+  }
+
+  async function handleTestMode() {
+    if (!nickname.trim()) { setError('Enter a nickname'); return }
+    setLoading(true)
+    try {
+      const gameId = nanoid(6).toUpperCase()
+      const playerId = crypto.randomUUID()
+      const botIds = await createTestGame(gameId, playerId, nickname.trim())
+      sessionStorage.setItem(`mahjong_player_${gameId}`, playerId)
+      sessionStorage.setItem(`mahjong_nickname_${gameId}`, nickname.trim())
+      sessionStorage.setItem(`mahjong_bots_${gameId}`, JSON.stringify(botIds))
+      router.push(`/game/${gameId}`)
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to start test game')
       setLoading(false)
     }
   }
@@ -56,6 +73,12 @@ export default function Home() {
               className="w-full bg-emerald-700 text-white font-bold py-4 rounded-xl text-lg hover:bg-emerald-600 active:scale-95 transition-all"
             >
               Join Game
+            </button>
+            <button
+              onClick={() => setMode('test')}
+              className="w-full bg-[#152030] text-emerald-400 font-bold py-4 rounded-xl text-lg hover:bg-[#1c2e42] active:scale-95 transition-all border border-emerald-700"
+            >
+              Solo Test Mode
             </button>
           </div>
         )}
@@ -106,6 +129,34 @@ export default function Home() {
               Join Game
             </button>
             <button onClick={() => setMode('home')} className="w-full text-emerald-400 text-sm hover:text-emerald-300">
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {mode === 'test' && (
+          <div className="bg-[#152030] rounded-2xl p-5 space-y-4">
+            <h2 className="text-white font-bold text-lg">Solo Test Mode</h2>
+            <p className="text-emerald-400 text-sm">Play against 3 bots. They draw and discard automatically.</p>
+            <input
+              type="text"
+              placeholder="Your nickname"
+              value={nickname}
+              onChange={e => { setNickname(e.target.value); setError('') }}
+              onKeyDown={e => e.key === 'Enter' && handleTestMode()}
+              maxLength={20}
+              autoFocus
+              className="w-full bg-emerald-800 text-white rounded-lg px-4 py-3 placeholder-emerald-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+            <button
+              onClick={handleTestMode}
+              disabled={loading}
+              className="w-full bg-emerald-600 text-white font-bold py-3 rounded-lg hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-50"
+            >
+              {loading ? 'Starting…' : 'Start Solo Game'}
+            </button>
+            <button onClick={() => { setMode('home'); setError('') }} className="w-full text-emerald-400 text-sm hover:text-emerald-300">
               ← Back
             </button>
           </div>

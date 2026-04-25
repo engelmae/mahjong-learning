@@ -1,8 +1,8 @@
 'use client'
-import { use, useState, useEffect } from 'react'
+import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
-import { subscribeToGame, joinGame, dealGame, leaveGame } from '@/lib/gameActions'
+import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, submitCharlestionPass, passClaim } from '@/lib/gameActions'
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
 
@@ -23,6 +23,12 @@ export default function GamePage({ params }: Props) {
   const [copied, setCopied] = useState(false)
   const [dealing, setDealing] = useState(false)
 
+  const [botIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(sessionStorage.getItem(`mahjong_bots_${gameId}`) ?? '[]') } catch { return [] }
+  })
+  const botActed = useRef<Set<string>>(new Set())
+
   // Restore or prompt for identity
   useEffect(() => {
     const storedId = sessionStorage.getItem(`mahjong_player_${gameId}`)
@@ -38,6 +44,40 @@ export default function GamePage({ params }: Props) {
     const unsub = subscribeToGame(gameId, setGame)
     return unsub
   }, [gameId])
+
+  // Auto-advance claim window when timer expires (all games)
+  useEffect(() => {
+    if (!game?.pendingClaim) return
+    const remaining = Math.max(0, game.pendingClaim.expiresAt - Date.now())
+    const t = setTimeout(() => passClaim(gameId), remaining + 300)
+    return () => clearTimeout(t)
+  }, [game?.pendingClaim?.tile?.id])
+
+  // Bot engine (test mode only)
+  useEffect(() => {
+    if (!game || !botIds.length) return
+    const acted = botActed.current
+
+    if (game.status === 'charleston') {
+      botIds.forEach(botId => {
+        const p = game.players[botId]
+        if (!p || p.charlestionReady) return
+        const key = `char-${botId}-${game.charlestionRound}`
+        if (acted.has(key)) return
+        acted.add(key)
+        const selection = [...p.hand].sort(() => Math.random() - 0.5).slice(0, 3)
+        setTimeout(() => submitCharlestionPass(gameId, botId, selection), 600 + Math.random() * 600)
+      })
+    }
+
+    if (game.status === 'playing' && game.currentTurn && botIds.includes(game.currentTurn)) {
+      const botId = game.currentTurn
+      const key = `turn-${botId}-${game.wallIndex}`
+      if (acted.has(key)) return
+      acted.add(key)
+      setTimeout(() => botTakeTurn(gameId, botId), 1200 + Math.random() * 800)
+    }
+  }, [game?.status, game?.currentTurn, game?.charlestionRound])
 
   async function handleJoin() {
     if (!nickname.trim()) { setError('Enter a nickname'); return }
@@ -153,21 +193,28 @@ export default function GamePage({ params }: Props) {
             <p className="text-emerald-400 text-sm">Code: <span className="font-mono font-bold text-white">{gameId}</span></p>
           </div>
 
-          {/* Share link */}
-          <div className="bg-[#152030] rounded-xl p-4 space-y-2">
-            <p className="text-emerald-300 text-sm font-medium">Share this link with friends:</p>
-            <div className="flex gap-2">
-              <code className="flex-1 bg-emerald-800 text-white text-xs rounded px-2 py-2 truncate">
-                {typeof window !== 'undefined' ? window.location.href : ''}
-              </code>
-              <button
-                onClick={copyLink}
-                className="bg-yellow-400 text-black font-bold px-3 py-2 rounded text-sm hover:bg-yellow-300 shrink-0"
-              >
-                {copied ? '✓' : 'Copy'}
-              </button>
+          {/* Share link / test mode banner */}
+          {botIds.length > 0 ? (
+            <div className="bg-emerald-900/50 border border-emerald-600 rounded-xl p-4">
+              <p className="text-emerald-300 text-sm font-medium text-center">Solo Test Mode</p>
+              <p className="text-emerald-500 text-xs text-center mt-1">3 bots will play automatically</p>
             </div>
-          </div>
+          ) : (
+            <div className="bg-[#152030] rounded-xl p-4 space-y-2">
+              <p className="text-emerald-300 text-sm font-medium">Share this link with friends:</p>
+              <div className="flex gap-2">
+                <code className="flex-1 bg-emerald-800 text-white text-xs rounded px-2 py-2 truncate">
+                  {typeof window !== 'undefined' ? window.location.href : ''}
+                </code>
+                <button
+                  onClick={copyLink}
+                  className="bg-yellow-400 text-black font-bold px-3 py-2 rounded text-sm hover:bg-yellow-300 shrink-0"
+                >
+                  {copied ? '✓' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Players */}
           <div className="bg-[#152030] rounded-xl p-4 space-y-2">

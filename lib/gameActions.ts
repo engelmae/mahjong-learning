@@ -3,6 +3,85 @@ import { getDb } from './firebase'
 import { GameState, Tile, ExposedSet, CharlestionDirection } from '@/types/game'
 import { buildDeck, shuffleDeck, dealHands } from './tiles'
 
+export async function createTestGame(
+  gameId: string,
+  hostId: string,
+  hostNickname: string
+): Promise<string[]> {
+  const botIds = [`bot1${gameId}`, `bot2${gameId}`, `bot3${gameId}`]
+  const botNames = ['Bot Amy', 'Bot Ben', 'Bot Cal']
+
+  const players: GameState['players'] = {
+    [hostId]: {
+      nickname: hostNickname,
+      seatIndex: 0,
+      hand: [],
+      exposedSets: [],
+      discards: [],
+      isReady: false,
+      charlestionSelection: [],
+      charlestionReady: false,
+    },
+  }
+  botIds.forEach((bid, i) => {
+    players[bid] = {
+      nickname: botNames[i],
+      seatIndex: i + 1,
+      hand: [],
+      exposedSets: [],
+      discards: [],
+      isReady: false,
+      charlestionSelection: [],
+      charlestionReady: false,
+    }
+  })
+
+  const initialState: GameState = {
+    status: 'waiting',
+    hostId,
+    players,
+    wall: [],
+    wallIndex: 0,
+    currentTurn: '',
+    lastDiscard: null,
+    pendingClaim: null,
+    charlestionRound: 0,
+    charlestionDirection: 'right',
+    winner: null,
+  }
+
+  await set(gameRef(gameId), initialState)
+  return botIds
+}
+
+export async function botTakeTurn(gameId: string, botId: string) {
+  const snap = await get(gameRef(gameId))
+  const game = snap.val() as GameState
+  if (game.currentTurn !== botId || game.status !== 'playing') return
+
+  const tile = game.wall[game.wallIndex]
+  if (!tile) return
+
+  const newHand = [...game.players[botId].hand, tile]
+  const candidates = newHand.filter(t => !t.isJoker)
+  const toDiscard = candidates[Math.floor(Math.random() * candidates.length)] ?? newHand[0]
+  const finalHand = newHand.filter(t => t.id !== toDiscard.id)
+  const newDiscards = [...(game.players[botId].discards ?? []), toDiscard]
+
+  await update(ref(getDb()), {
+    [`games/${gameId}/wallIndex`]: game.wallIndex + 1,
+    [`games/${gameId}/players/${botId}/hand`]: finalHand,
+    [`games/${gameId}/players/${botId}/discards`]: newDiscards,
+    [`games/${gameId}/lastDiscard`]: { tile: toDiscard, fromPlayerId: botId },
+    [`games/${gameId}/pendingClaim`]: {
+      tile: toDiscard,
+      fromPlayerId: botId,
+      expiresAt: Date.now() + 8000,
+    },
+    [`games/${gameId}/currentTurn`]: '',
+  })
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function gameRef(gameId: string) {
