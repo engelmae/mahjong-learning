@@ -1,7 +1,7 @@
 export type Suit = 'bam' | 'crak' | 'dot' | 'wind' | 'dragon' | 'flower' | 'joker'
 export type Wind = 'N' | 'S' | 'E' | 'W'
 export type Dragon = 'Red' | 'Green' | 'Soap'
-export type GameStatus = 'waiting' | 'charleston' | 'playing' | 'finished'
+export type GameStatus = 'waiting' | 'charleston' | 'playing' | 'finished' | 'abandoned'
 export type CharlestionDirection = 'right' | 'across' | 'left'
 
 export interface Tile {

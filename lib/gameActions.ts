@@ -161,9 +161,10 @@ async function processCharlestionRound(gameId: string, game: GameState) {
   }
 
   const nextRound = game.charlestionRound + 1
-  const directions: CharlestionDirection[] = ['right', 'across', 'left']
-  const nextDir = directions[nextRound] ?? 'left'
-  const done = nextRound >= 3
+  // Full Charleston: Right, Across, Left, Left, Across, Right (6 passes)
+  const directions: CharlestionDirection[] = ['right', 'across', 'left', 'left', 'across', 'right']
+  const nextDir = directions[nextRound] ?? 'right'
+  const done = nextRound >= 6
 
   const updates: Record<string, unknown> = {
     [`games/${gameId}/charlestionRound`]: nextRound,
@@ -330,6 +331,29 @@ export async function resetGame(gameId: string) {
     updates[`games/${gameId}/players/${pid}/charlestionSelection`] = []
     updates[`games/${gameId}/players/${pid}/charlestionReady`] = false
   })
+
+  await update(ref(getDb()), updates)
+}
+
+export async function leaveGame(gameId: string, playerId: string) {
+  const snap = await get(gameRef(gameId))
+  if (!snap.exists()) return
+  const game = snap.val() as GameState
+
+  const updates: Record<string, unknown> = {
+    [`games/${gameId}/players/${playerId}`]: null,
+  }
+
+  const remainingCount = Object.keys(game.players).length - 1
+  if (remainingCount === 0) {
+    await set(gameRef(gameId), null)
+    return
+  }
+
+  // End the game if host left or not enough players mid-game
+  if (game.hostId === playerId || (game.status !== 'waiting' && remainingCount < 4)) {
+    updates[`games/${gameId}/status`] = 'abandoned'
+  }
 
   await update(ref(getDb()), updates)
 }

@@ -9,9 +9,10 @@ interface Props {
   game: GameState
   gameId: string
   myPlayerId: string
+  onLeave: () => void
 }
 
-export default function GameBoard({ game, gameId, myPlayerId }: Props) {
+export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) {
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null)
   const [drewThisTurn, setDrewThisTurn] = useState(false)
   const [claimTiles, setClaimTiles] = useState<Tile[]>([])
@@ -122,12 +123,20 @@ export default function GameBoard({ game, gameId, myPlayerId }: Props) {
             )
           })}
         </div>
-        <button
-          onClick={() => resetGame(gameId)}
-          className="bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg hover:bg-yellow-300 active:scale-95"
-        >
-          Play Again
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => resetGame(gameId)}
+            className="bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg hover:bg-yellow-300 active:scale-95"
+          >
+            Play Again
+          </button>
+          <button
+            onClick={onLeave}
+            className="bg-gray-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-gray-500 active:scale-95"
+          >
+            Leave
+          </button>
+        </div>
       </div>
     )
   }
@@ -253,6 +262,12 @@ export default function GameBoard({ game, gameId, myPlayerId }: Props) {
               {game.currentTurn ? `Waiting for ${game.players[game.currentTurn]?.nickname ?? '…'}` : 'Waiting…'}
             </p>
           )}
+          <button
+            onClick={onLeave}
+            className="text-xs text-emerald-600 hover:text-red-400 py-2 px-2"
+          >
+            Leave Game
+          </button>
         </div>
       </div>
     </div>

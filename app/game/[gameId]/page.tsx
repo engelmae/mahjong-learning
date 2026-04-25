@@ -2,7 +2,7 @@
 import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
-import { subscribeToGame, joinGame, dealGame } from '@/lib/gameActions'
+import { subscribeToGame, joinGame, dealGame, leaveGame } from '@/lib/gameActions'
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
 
@@ -54,6 +54,14 @@ export default function GamePage({ params }: Props) {
     } finally {
       setJoining(false)
     }
+  }
+
+  async function handleLeave() {
+    if (!myPlayerId) { router.push('/'); return }
+    await leaveGame(gameId, myPlayerId)
+    sessionStorage.removeItem(`mahjong_player_${gameId}`)
+    sessionStorage.removeItem(`mahjong_nickname_${gameId}`)
+    router.push('/')
   }
 
   function copyLink() {
@@ -192,6 +200,28 @@ export default function GamePage({ params }: Props) {
               {playerCount < 4 ? 'Waiting for more players…' : 'Waiting for host to deal…'}
             </p>
           )}
+          <button
+            onClick={handleLeave}
+            className="w-full text-emerald-500 hover:text-red-400 text-sm py-2"
+          >
+            Leave Game
+          </button>
+        </div>
+      </main>
+    )
+  }
+
+  // ── Abandoned ─────────────────────────────────────────────────────────────
+  if (game.status === 'abandoned') {
+    return (
+      <main className="min-h-screen bg-emerald-950 flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <div className="text-5xl">😔</div>
+          <h2 className="text-white font-bold text-xl">Game Ended</h2>
+          <p className="text-emerald-400">A player left the game.</p>
+          <button onClick={() => router.push('/')} className="bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg hover:bg-yellow-300">
+            Back to Home
+          </button>
         </div>
       </main>
     )
@@ -206,7 +236,7 @@ export default function GamePage({ params }: Props) {
           <p className="text-xl font-bold">Rotate your phone to landscape to play</p>
         </div>
         <main className="h-screen bg-emerald-900 overflow-hidden">
-          <Charleston game={game} gameId={gameId} myPlayerId={myPlayerId} />
+          <Charleston game={game} gameId={gameId} myPlayerId={myPlayerId} onLeave={handleLeave} />
         </main>
       </>
     )
@@ -220,7 +250,7 @@ export default function GamePage({ params }: Props) {
         <p className="text-xl font-bold">Rotate your phone to landscape to play</p>
       </div>
       <main className="h-screen bg-emerald-900 overflow-hidden">
-        <GameBoard game={game} gameId={gameId} myPlayerId={myPlayerId} />
+        <GameBoard game={game} gameId={gameId} myPlayerId={myPlayerId} onLeave={handleLeave} />
       </main>
     </>
   )
