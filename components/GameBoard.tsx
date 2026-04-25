@@ -5,6 +5,18 @@ import TileComponent from './Tile'
 import ExposedSets from './ExposedSets'
 import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, swapJoker, resetGame } from '@/lib/gameActions'
 
+const SUIT_ORDER: Record<string, number> = { bam: 0, crak: 1, dot: 2, wind: 3, dragon: 4, flower: 5, joker: 6 }
+const WIND_ORDER: Record<string, number> = { E: 0, S: 1, W: 2, N: 3 }
+const DRAGON_ORDER: Record<string, number> = { Red: 0, Green: 1, Soap: 2 }
+
+function tileSort(a: Tile, b: Tile): number {
+  const sd = (SUIT_ORDER[a.suit] ?? 9) - (SUIT_ORDER[b.suit] ?? 9)
+  if (sd !== 0) return sd
+  const av = typeof a.value === 'number' ? a.value : (WIND_ORDER[a.value as string] ?? DRAGON_ORDER[a.value as string] ?? 0)
+  const bv = typeof b.value === 'number' ? b.value : (WIND_ORDER[b.value as string] ?? DRAGON_ORDER[b.value as string] ?? 0)
+  return (av as number) - (bv as number)
+}
+
 interface Props {
   game: GameState
   gameId: string
@@ -18,12 +30,25 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const [claimTiles, setClaimTiles] = useState<Tile[]>([])
   const [showClaim, setShowClaim] = useState(false)
   const [claimCountdown, setClaimCountdown] = useState(0)
+  const [handOrder, setHandOrder] = useState<string[]>([])
+  const [movingTile, setMovingTile] = useState<string | null>(null)
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
   const pending = game.pendingClaim
   const isMyDiscard = pending?.fromPlayerId === myPlayerId
   const canClaim = !!pending && !isMyDiscard && game.status === 'playing'
+
+  // Sync hand order: preserve existing arrangement, append new tiles
+  useEffect(() => {
+    const currentIds = (me?.hand ?? []).map(t => t.id)
+    const currentIdSet = new Set(currentIds)
+    setHandOrder(prev => {
+      const retained = prev.filter(id => currentIdSet.has(id))
+      const newIds = currentIds.filter(id => !new Set(retained).has(id))
+      return [...retained, ...newIds]
+    })
+  }, [(me?.hand ?? []).map(t => t.id).join(',')])
 
   // Countdown timer for claim window
   useEffect(() => {
@@ -47,12 +72,40 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   useEffect(() => {
     setDrewThisTurn(false)
     setSelectedTile(null)
+    setMovingTile(null)
   }, [game.currentTurn])
 
   const playerIds = Object.keys(game.players).sort(
     (a, b) => game.players[a].seatIndex - game.players[b].seatIndex
   )
   const opponents = playerIds.filter(id => id !== myPlayerId)
+
+  function sortHand() {
+    const sorted = [...(me?.hand ?? [])].sort(tileSort)
+    setHandOrder(sorted.map(t => t.id))
+    setMovingTile(null)
+  }
+
+  function handleTileClick(tile: Tile) {
+    if (isMyTurn && drewThisTurn) {
+      setSelectedTile(prev => prev?.id === tile.id ? null : tile)
+    } else {
+      if (movingTile === null) {
+        setMovingTile(tile.id)
+      } else if (movingTile === tile.id) {
+        setMovingTile(null)
+      } else {
+        setHandOrder(prev => {
+          const next = [...prev]
+          const ai = next.indexOf(movingTile)
+          const bi = next.indexOf(tile.id)
+          if (ai !== -1 && bi !== -1) [next[ai], next[bi]] = [next[bi], next[ai]]
+          return next
+        })
+        setMovingTile(null)
+      }
+    }
+  }
 
   async function handleDraw() {
     await drawTile(gameId, myPlayerId)
@@ -106,7 +159,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             {game.winner === myPlayerId ? '🎉 You won!' : `${winner.nickname} wins!`}
           </p>
         )}
-        {/* Show all hands */}
         <div className="w-full space-y-3">
           {playerIds.map(pid => {
             const p = game.players[pid]
@@ -141,9 +193,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     )
   }
 
+  const orderedHand = handOrder.map(id => (me?.hand ?? []).find(t => t.id === id)).filter(Boolean) as Tile[]
+
   return (
     <div className="flex flex-col h-full bg-[#152030] text-white overflow-hidden">
-      {/* Opponents area - top portion */}
+      {/* Opponents area */}
       <div className="flex-1 flex flex-col gap-1 p-2 overflow-hidden">
         {opponents.map(pid => {
           const opp = game.players[pid]
@@ -155,7 +209,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                 {isOppTurn && <span className="text-xs bg-yellow-400 text-black px-1 rounded">Their turn</span>}
                 <span className="text-xs text-gray-400 ml-auto">{opp.hand?.length ?? 0} tiles</span>
               </div>
-              {/* Face-down hand */}
               <div className="flex gap-0.5 overflow-hidden">
                 {Array.from({ length: Math.min(opp.hand?.length ?? 0, 16) }).map((_, i) => (
                   <TileComponent key={i} tile={{ id: `fd-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
@@ -168,7 +221,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                 onJokerSwap={isMyTurn ? (si, ji, jt, rt) => handleJokerSwap(pid, si, ji, jt, rt) : undefined}
                 small
               />
-              {/* Discard pile - last few discards */}
               {opp.discards && opp.discards.length > 0 && (
                 <div className="flex gap-0.5 mt-1 flex-wrap">
                   {opp.discards.slice(-8).map(t => (
@@ -180,12 +232,10 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           )
         })}
 
-        {/* Wall count */}
         <div className="text-center text-xs text-emerald-400">
           🀫 {Math.max(0, (game.wall?.length ?? 0) - game.wallIndex)} tiles in wall
         </div>
 
-        {/* Pending claim overlay */}
         {showClaim && pending && !isMyDiscard && (
           <div className="bg-yellow-900/90 border border-yellow-400 rounded-lg p-3 space-y-2">
             <p className="text-yellow-300 font-bold text-center">
@@ -202,15 +252,10 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         )}
       </div>
 
-      {/* My area - bottom fixed strip */}
+      {/* My area */}
       <div className={`shrink-0 p-2 border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
-        {/* My exposed + discards */}
         <div className="flex gap-2 mb-1 flex-wrap">
-          <ExposedSets
-            sets={me?.exposedSets ?? []}
-            ownerId={myPlayerId}
-            small
-          />
+          <ExposedSets sets={me?.exposedSets ?? []} ownerId={myPlayerId} small />
           {me?.discards && me.discards.length > 0 && (
             <div className="flex gap-0.5 flex-wrap">
               {me.discards.slice(-6).map(t => <TileComponent key={t.id} tile={t} small />)}
@@ -218,20 +263,33 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           )}
         </div>
 
-        {/* My hand - landscape: fits 14 tiles */}
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {(me?.hand ?? []).map(tile => (
-            <TileComponent
-              key={tile.id}
-              tile={tile}
-              selected={selectedTile?.id === tile.id}
-              onClick={isMyTurn && drewThisTurn ? () => setSelectedTile(prev => prev?.id === tile.id ? null : tile) : undefined}
-            />
-          ))}
+        {/* Hand row with sort button */}
+        <div className="flex items-center gap-1">
+          <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
+            {orderedHand.map(tile => (
+              <TileComponent
+                key={tile.id}
+                tile={tile}
+                selected={isMyTurn && drewThisTurn ? selectedTile?.id === tile.id : movingTile === tile.id}
+                onClick={() => handleTileClick(tile)}
+              />
+            ))}
+          </div>
+          <button
+            onClick={sortHand}
+            className="shrink-0 text-xs text-emerald-400 hover:text-emerald-200 border border-emerald-700 hover:border-emerald-500 rounded px-1.5 py-1 ml-1"
+            title="Sort by suit"
+          >
+            Sort
+          </button>
         </div>
 
+        {movingTile && !(isMyTurn && drewThisTurn) && (
+          <p className="text-xs text-yellow-400 text-center mt-0.5">Tap another tile to swap</p>
+        )}
+
         {/* Action buttons */}
-        <div className="flex gap-2 mt-2 justify-center flex-wrap">
+        <div className="flex gap-2 mt-1 justify-center flex-wrap">
           {isMyTurn && !drewThisTurn && (
             <button
               onClick={handleDraw}
