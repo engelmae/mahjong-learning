@@ -35,7 +35,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-emerald-950 flex items-center justify-center p-6">
+    <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <div className="text-6xl mb-2">🀄</div>
@@ -61,7 +61,7 @@ export default function Home() {
         )}
 
         {mode === 'create' && (
-          <div className="bg-emerald-900 rounded-2xl p-5 space-y-4">
+          <div className="bg-[#152030] rounded-2xl p-5 space-y-4">
             <h2 className="text-white font-bold text-lg">Create a Game</h2>
             <input
               type="text"
@@ -87,7 +87,7 @@ export default function Home() {
         )}
 
         {mode === 'join' && (
-          <div className="bg-emerald-900 rounded-2xl p-5 space-y-4">
+          <div className="bg-[#152030] rounded-2xl p-5 space-y-4">
             <h2 className="text-white font-bold text-lg">Join a Game</h2>
             <input
               type="text"

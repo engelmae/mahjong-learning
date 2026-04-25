@@ -98,7 +98,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   if (game.status === 'finished') {
     const winner = game.winner ? game.players[game.winner] : null
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-emerald-900 text-white gap-6 p-8">
+      <div className="flex flex-col items-center justify-center h-full bg-[#152030] text-white gap-6 p-8">
         <div className="text-6xl">🀄</div>
         <h2 className="text-3xl font-bold">Mah Jongg!</h2>
         {winner && (
@@ -142,7 +142,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   }
 
   return (
-    <div className="flex flex-col h-full bg-emerald-900 text-white overflow-hidden">
+    <div className="flex flex-col h-full bg-[#152030] text-white overflow-hidden">
       {/* Opponents area - top portion */}
       <div className="flex-1 flex flex-col gap-1 p-2 overflow-hidden">
         {opponents.map(pid => {

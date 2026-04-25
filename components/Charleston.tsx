@@ -58,7 +58,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   }
 
   return (
-    <div className="flex flex-col h-full bg-emerald-900 text-white p-3 gap-3">
+    <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-3">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex-1 text-center">

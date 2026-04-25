@@ -82,8 +82,8 @@ export default function GamePage({ params }: Props) {
   // ── Nickname modal ────────────────────────────────────────────────────────
   if (showNicknameModal) {
     return (
-      <main className="min-h-screen bg-emerald-950 flex items-center justify-center p-6">
-        <div className="bg-emerald-900 rounded-2xl p-6 w-full max-w-sm space-y-4">
+      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
+        <div className="bg-[#152030] rounded-2xl p-6 w-full max-w-sm space-y-4">
           <div className="text-center">
             <div className="text-4xl mb-2">🀄</div>
             <h2 className="text-white font-bold text-xl">Join Game</h2>
@@ -118,7 +118,7 @@ export default function GamePage({ params }: Props) {
   // ── Loading ───────────────────────────────────────────────────────────────
   if (!game || !myPlayerId) {
     return (
-      <main className="min-h-screen bg-emerald-950 flex items-center justify-center">
+      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center">
         <div className="text-emerald-300 text-lg animate-pulse">Loading game…</div>
       </main>
     )
@@ -127,7 +127,7 @@ export default function GamePage({ params }: Props) {
   // ── Not in game ───────────────────────────────────────────────────────────
   if (!game.players[myPlayerId]) {
     return (
-      <main className="min-h-screen bg-emerald-950 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
         <div className="text-center text-white space-y-4">
           <p className="text-red-400">You are not in this game.</p>
           <button onClick={() => router.push('/')} className="bg-yellow-400 text-black font-bold py-2 px-6 rounded-lg">
@@ -145,7 +145,7 @@ export default function GamePage({ params }: Props) {
   // ── Waiting lobby ─────────────────────────────────────────────────────────
   if (game.status === 'waiting') {
     return (
-      <main className="min-h-screen bg-emerald-950 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
         <div className="w-full max-w-sm space-y-5">
           <div className="text-center">
             <div className="text-4xl mb-1">🀄</div>
@@ -154,7 +154,7 @@ export default function GamePage({ params }: Props) {
           </div>
 
           {/* Share link */}
-          <div className="bg-emerald-900 rounded-xl p-4 space-y-2">
+          <div className="bg-[#152030] rounded-xl p-4 space-y-2">
             <p className="text-emerald-300 text-sm font-medium">Share this link with friends:</p>
             <div className="flex gap-2">
               <code className="flex-1 bg-emerald-800 text-white text-xs rounded px-2 py-2 truncate">
@@ -170,7 +170,7 @@ export default function GamePage({ params }: Props) {
           </div>
 
           {/* Players */}
-          <div className="bg-emerald-900 rounded-xl p-4 space-y-2">
+          <div className="bg-[#152030] rounded-xl p-4 space-y-2">
             <p className="text-emerald-300 text-sm font-medium">Players ({playerCount}/4):</p>
             {players.map(p => (
               <div key={p.seatIndex} className="flex items-center gap-2 text-white">
@@ -214,7 +214,7 @@ export default function GamePage({ params }: Props) {
   // ── Abandoned ─────────────────────────────────────────────────────────────
   if (game.status === 'abandoned') {
     return (
-      <main className="min-h-screen bg-emerald-950 flex items-center justify-center p-6">
+      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
         <div className="text-center space-y-4">
           <div className="text-5xl">😔</div>
           <h2 className="text-white font-bold text-xl">Game Ended</h2>
@@ -235,7 +235,7 @@ export default function GamePage({ params }: Props) {
           <div className="text-5xl">📱↔️</div>
           <p className="text-xl font-bold">Rotate your phone to landscape to play</p>
         </div>
-        <main className="h-screen bg-emerald-900 overflow-hidden">
+        <main className="h-screen bg-[#152030] overflow-hidden">
           <Charleston game={game} gameId={gameId} myPlayerId={myPlayerId} onLeave={handleLeave} />
         </main>
       </>
@@ -249,7 +249,7 @@ export default function GamePage({ params }: Props) {
         <div className="text-5xl">📱↔️</div>
         <p className="text-xl font-bold">Rotate your phone to landscape to play</p>
       </div>
-      <main className="h-screen bg-emerald-900 overflow-hidden">
+      <main className="h-screen bg-[#152030] overflow-hidden">
         <GameBoard game={game} gameId={gameId} myPlayerId={myPlayerId} onLeave={handleLeave} />
       </main>
     </>
