@@ -199,34 +199,38 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   return (
     <div className="flex flex-col h-full bg-[#152030] text-white overflow-hidden">
       {/* Opponents area */}
-      <div className="flex-1 flex flex-col gap-1 p-2 overflow-hidden">
+      <div className="flex-1 flex flex-col gap-0.5 p-1.5 overflow-hidden min-h-0">
         {opponents.map(pid => {
           const opp = game.players[pid]
           const isOppTurn = game.currentTurn === pid
           return (
-            <div key={pid} className={`rounded-lg p-2 ${isOppTurn ? 'bg-yellow-600/30 ring-1 ring-yellow-400' : 'bg-black/20'}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold">{opp.nickname}</span>
-                {isOppTurn && <span className="text-xs bg-yellow-400 text-black px-1 rounded">Their turn</span>}
-                <span className="text-xs text-gray-400 ml-auto">{opp.hand?.length ?? 0} tiles</span>
-              </div>
-              <div className="flex gap-0.5 overflow-hidden">
-                {Array.from({ length: Math.min(opp.hand?.length ?? 0, 16) }).map((_, i) => (
-                  <TileComponent key={i} tile={{ id: `fd-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
-                ))}
-              </div>
-              <ExposedSets
-                sets={opp.exposedSets ?? []}
-                ownerId={pid}
-                myHand={me?.hand}
-                onJokerSwap={isMyTurn ? (si, ji, jt, rt) => handleJokerSwap(pid, si, ji, jt, rt) : undefined}
-                small
-              />
-              {opp.discards && opp.discards.length > 0 && (
-                <div className="flex gap-0.5 mt-1 flex-wrap">
-                  {opp.discards.slice(-8).map(t => (
-                    <TileComponent key={t.id} tile={t} small />
+            <div key={pid} className={`rounded px-1.5 py-1 ${isOppTurn ? 'bg-yellow-600/30 ring-1 ring-yellow-400' : 'bg-black/20'}`}>
+              {/* Name + tiles on one row */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold shrink-0 max-w-[56px] truncate">{opp.nickname}</span>
+                {isOppTurn && <span className="text-[10px] bg-yellow-400 text-black px-1 rounded shrink-0">▶</span>}
+                <div className="flex gap-0.5 overflow-hidden flex-1">
+                  {Array.from({ length: Math.min(opp.hand?.length ?? 0, 16) }).map((_, i) => (
+                    <TileComponent key={i} tile={{ id: `fd-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
                   ))}
+                </div>
+                <span className="text-[10px] text-gray-400 shrink-0">{opp.hand?.length ?? 0}</span>
+              </div>
+              {/* Exposed sets + discards only if non-empty */}
+              {(opp.exposedSets?.length > 0 || opp.discards?.length > 0) && (
+                <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                  <ExposedSets
+                    sets={opp.exposedSets ?? []}
+                    ownerId={pid}
+                    myHand={me?.hand}
+                    onJokerSwap={isMyTurn ? (si, ji, jt, rt) => handleJokerSwap(pid, si, ji, jt, rt) : undefined}
+                    small
+                  />
+                  {opp.discards && opp.discards.length > 0 && (
+                    <div className="flex gap-0.5">
+                      {opp.discards.slice(-6).map(t => <TileComponent key={t.id} tile={t} small />)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -239,64 +243,54 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         </div>
 
         {showClaim && pending && !isMyDiscard && (
-          <div className="bg-yellow-900/90 border border-yellow-400 rounded-lg p-3 space-y-2">
-            <p className="text-yellow-300 font-bold text-center">
+          <div className="bg-yellow-900/90 border border-yellow-400 rounded-lg p-2 space-y-1.5">
+            <p className="text-yellow-300 font-bold text-center text-sm">
               Claim {pending.tile.label}? ({claimCountdown}s)
             </p>
             <div className="flex gap-2 justify-center flex-wrap">
-              <button onClick={() => handleClaim('pung')} className="bg-blue-500 text-white px-3 py-1.5 rounded font-bold text-sm hover:bg-blue-400">Pung</button>
-              <button onClick={() => handleClaim('kong')} className="bg-purple-500 text-white px-3 py-1.5 rounded font-bold text-sm hover:bg-purple-400">Kong</button>
-              <button onClick={() => handleClaim('chow')} className="bg-green-500 text-white px-3 py-1.5 rounded font-bold text-sm hover:bg-green-400">Chow</button>
-              <button onClick={() => handleClaim('mahjong')} className="bg-yellow-500 text-black px-3 py-1.5 rounded font-bold text-sm hover:bg-yellow-400">Mah Jongg!</button>
-              <button onClick={handlePass} className="bg-gray-600 text-white px-3 py-1.5 rounded font-bold text-sm hover:bg-gray-500">Pass</button>
+              <button onClick={() => handleClaim('pung')} className="bg-blue-500 text-white px-3 py-1 rounded font-bold text-sm hover:bg-blue-400">Pung</button>
+              <button onClick={() => handleClaim('kong')} className="bg-purple-500 text-white px-3 py-1 rounded font-bold text-sm hover:bg-purple-400">Kong</button>
+              <button onClick={() => handleClaim('chow')} className="bg-green-500 text-white px-3 py-1 rounded font-bold text-sm hover:bg-green-400">Chow</button>
+              <button onClick={() => handleClaim('mahjong')} className="bg-yellow-500 text-black px-3 py-1 rounded font-bold text-sm hover:bg-yellow-400">Mah Jongg!</button>
+              <button onClick={handlePass} className="bg-gray-600 text-white px-3 py-1 rounded font-bold text-sm hover:bg-gray-500">Pass</button>
             </div>
           </div>
         )}
       </div>
 
       {/* My area */}
-      <div className={`shrink-0 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
-        <div className="flex gap-2 mb-1 flex-wrap">
-          <ExposedSets sets={me?.exposedSets ?? []} ownerId={myPlayerId} small />
-          {me?.discards && me.discards.length > 0 && (
-            <div className="flex gap-0.5 flex-wrap">
-              {me.discards.slice(-6).map(t => <TileComponent key={t.id} tile={t} small />)}
-            </div>
-          )}
-        </div>
-
-        {/* Hand row with sort button */}
-        <div className="flex items-center gap-1">
-          <div className="flex gap-1 overflow-x-auto pb-1 flex-1">
-            {orderedHand.map(tile => (
-              <TileComponent
-                key={tile.id}
-                tile={tile}
-                selected={isMyTurn && drewThisTurn ? selectedTile?.id === tile.id : movingTile === tile.id}
-                onClick={() => handleTileClick(tile)}
-              />
-            ))}
+      <div className={`shrink-0 px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
+        {(me?.exposedSets?.length > 0 || me?.discards?.length > 0) && (
+          <div className="flex gap-2 mb-1 flex-wrap">
+            <ExposedSets sets={me?.exposedSets ?? []} ownerId={myPlayerId} small />
+            {me?.discards && me.discards.length > 0 && (
+              <div className="flex gap-0.5 flex-wrap">
+                {me.discards.slice(-6).map(t => <TileComponent key={t.id} tile={t} small />)}
+              </div>
+            )}
           </div>
-          <button
-            onClick={sortHand}
-            className="shrink-0 text-xs text-emerald-400 hover:text-emerald-200 border border-emerald-700 hover:border-emerald-500 rounded px-1.5 py-1 ml-1"
-            title="Sort by suit"
-          >
-            Sort
-          </button>
+        )}
+
+        {/* Hand — full width, no competing element */}
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {orderedHand.map(tile => (
+            <TileComponent
+              key={tile.id}
+              tile={tile}
+              selected={isMyTurn && drewThisTurn ? selectedTile?.id === tile.id : movingTile === tile.id}
+              onClick={() => handleTileClick(tile)}
+            />
+          ))}
         </div>
 
         {movingTile && !(isMyTurn && drewThisTurn) && (
-          <p className="text-xs text-yellow-400 text-center mt-0.5">Tap another tile to swap</p>
+          <p className="text-xs text-yellow-400 text-center">Tap another tile to swap</p>
         )}
 
         {/* Action buttons */}
-        <div className="flex gap-2 mt-1 justify-center flex-wrap">
+        <div className="flex gap-1.5 mt-1 justify-center flex-wrap items-center">
           {isMyTurn && !drewThisTurn && (
-            <button
-              onClick={handleDraw}
-              className="bg-emerald-500 text-white font-bold py-2 px-5 rounded-lg hover:bg-emerald-400 active:scale-95 text-sm"
-            >
+            <button onClick={handleDraw} className="bg-emerald-500 text-white font-bold py-1.5 px-4 rounded-lg hover:bg-emerald-400 active:scale-95 text-sm">
               Draw Tile
             </button>
           )}
@@ -305,28 +299,25 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               <button
                 onClick={handleDiscard}
                 disabled={!selectedTile}
-                className={`font-bold py-2 px-5 rounded-lg text-sm transition-all ${selectedTile ? 'bg-red-500 text-white hover:bg-red-400 active:scale-95' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                className={`font-bold py-1.5 px-4 rounded-lg text-sm transition-all ${selectedTile ? 'bg-red-500 text-white hover:bg-red-400 active:scale-95' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
               >
                 Discard {selectedTile ? `(${selectedTile.label})` : '(tap a tile)'}
               </button>
-              <button
-                onClick={handleDeclareWin}
-                className="bg-yellow-400 text-black font-bold py-2 px-4 rounded-lg hover:bg-yellow-300 active:scale-95 text-sm"
-              >
+              <button onClick={handleDeclareWin} className="bg-yellow-400 text-black font-bold py-1.5 px-3 rounded-lg hover:bg-yellow-300 active:scale-95 text-sm">
                 Mah Jongg! 🀄
               </button>
             </>
           )}
           {!isMyTurn && !canClaim && (
-            <p className="text-emerald-400 text-sm py-2">
+            <p className="text-emerald-400 text-sm">
               {game.currentTurn ? `Waiting for ${game.players[game.currentTurn]?.nickname ?? '…'}` : 'Waiting…'}
             </p>
           )}
-          <button
-            onClick={onLeave}
-            className="text-xs text-emerald-600 hover:text-red-400 py-2 px-2"
-          >
-            Leave Game
+          <button onClick={sortHand} className="text-xs text-emerald-400 hover:text-emerald-200 border border-emerald-700 hover:border-emerald-500 rounded px-2 py-1">
+            Sort
+          </button>
+          <button onClick={onLeave} className="text-xs text-emerald-600 hover:text-red-400 py-1 px-1">
+            Leave
           </button>
         </div>
       </div>
