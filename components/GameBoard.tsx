@@ -215,9 +215,9 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
       </div>
 
       {/* My area */}
-      <div className={`shrink-0 px-2 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
+      <div className={`shrink-0 px-2 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
         {(me?.exposedSets?.length > 0 || me?.discards?.length > 0) && (
-          <div className="flex gap-2 mb-1 flex-wrap">
+          <div className="flex gap-2 mb-0.5 flex-wrap">
             <ExposedSets sets={me?.exposedSets ?? []} ownerId={myPlayerId} small />
             {me?.discards && me.discards.length > 0 && (
               <div className="flex gap-0.5 flex-wrap">
@@ -227,15 +227,10 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           </div>
         )}
 
-        {/* Drag hint */}
-        {drag.dragging && (
-          <p className="text-xs text-yellow-300 text-center mb-0.5">Slide to position, release to drop</p>
-        )}
-
-        {/* Hand — full width, drag-to-reorder */}
+        {/* Hand — small tiles, full width, drag-to-reorder */}
         <div
           ref={drag.containerRef}
-          className="flex gap-1 overflow-x-auto pb-1"
+          className="flex gap-1 overflow-x-auto"
           style={{ touchAction: drag.dragging ? 'none' : 'pan-x' }}
           onPointerMove={drag.onMove}
           onPointerUp={drag.onUp}
@@ -250,6 +245,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             >
               <TileComponent
                 tile={tile}
+                small
                 selected={!drag.dragging && isMyTurn && drewThisTurn && selectedTile?.id === tile.id}
                 onClick={() => handleTileClick(tile)}
               />
@@ -258,7 +254,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         </div>
 
         {/* Action buttons */}
-        <div className="flex gap-1.5 mt-1 justify-center flex-wrap items-center">
+        <div className="flex gap-1.5 mt-0.5 justify-center flex-wrap items-center">
           {isMyTurn && !drewThisTurn && (
             <button onClick={handleDraw} className="bg-emerald-500 text-white font-bold py-1.5 px-4 rounded-lg text-sm active:scale-95">
               Draw Tile
