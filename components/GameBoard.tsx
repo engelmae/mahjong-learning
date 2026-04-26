@@ -4,6 +4,7 @@ import { GameState, Tile } from '@/types/game'
 import TileComponent from './Tile'
 import ExposedSets from './ExposedSets'
 import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, swapJoker, resetGame } from '@/lib/gameActions'
+import { VERSION } from '@/lib/version'
 
 const SUIT_ORDER: Record<string, number> = { bam: 0, crak: 1, dot: 2, wind: 3, dragon: 4, flower: 5, joker: 6 }
 const WIND_ORDER: Record<string, number> = { E: 0, S: 1, W: 2, N: 3 }
@@ -234,6 +235,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
         <div className="text-center text-xs text-emerald-400">
           🀫 {Math.max(0, (game.wall?.length ?? 0) - game.wallIndex)} tiles in wall
+          <span className="text-emerald-800 ml-2">{VERSION}</span>
         </div>
 
         {showClaim && pending && !isMyDiscard && (

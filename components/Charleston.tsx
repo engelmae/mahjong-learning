@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Tile, GameState } from '@/types/game'
 import TileComponent from './Tile'
 import { submitCharlestionPass } from '@/lib/gameActions'
+import { VERSION } from '@/lib/version'
 
 const PASS_SEQUENCE = [
   { label: '→ First Right',  dir: 'right'  },
@@ -117,6 +118,12 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-3">
       {/* Header */}
       <div className="flex items-start justify-between">
+        <button
+          onClick={sortHand}
+          className="text-xs text-emerald-400 hover:text-emerald-200 border border-emerald-600 hover:border-emerald-400 rounded px-2 py-1 shrink-0 font-medium"
+        >
+          Sort
+        </button>
         <div className="flex-1 text-center">
           <h2 className="text-lg font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
           <p className="text-emerald-300 text-sm">{currentPass.label}</p>
@@ -124,9 +131,12 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
             {playersReady}/{totalPlayers} players ready
           </p>
         </div>
-        <button onClick={onLeave} className="text-xs text-emerald-500 hover:text-red-400 shrink-0 px-1">
-          Leave
-        </button>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <button onClick={onLeave} className="text-xs text-emerald-500 hover:text-red-400 px-1">
+            Leave
+          </button>
+          <span className="text-xs text-emerald-800">{VERSION}</span>
+        </div>
       </div>
 
       {alreadySubmitted ? (
@@ -141,17 +151,9 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
         </div>
       ) : (
         <>
-          <div className="flex items-center justify-center gap-3">
-            <p className="text-sm text-emerald-300">
-              {movingTile ? 'Tap another tile to swap' : `Tap 3 tiles to pass ${currentPass.label.toLowerCase()}`}
-            </p>
-            <button
-              onClick={sortHand}
-              className="text-xs text-emerald-400 hover:text-emerald-200 border border-emerald-700 hover:border-emerald-500 rounded px-2 py-0.5 shrink-0"
-            >
-              Sort
-            </button>
-          </div>
+          <p className="text-sm text-emerald-300 text-center">
+            {movingTile ? 'Tap another tile to swap' : `Tap 3 tiles to pass ${currentPass.label.toLowerCase()}`}
+          </p>
 
           {/* Hand */}
           <div className="flex-1 flex items-end justify-center">

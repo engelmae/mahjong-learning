@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { nanoid } from 'nanoid'
 import { createGame, createTestGame } from '@/lib/gameActions'
+import { VERSION } from '@/lib/version'
 
 export default function Home() {
   const router = useRouter()
@@ -58,6 +59,7 @@ export default function Home() {
           <div className="text-6xl mb-2">🀄</div>
           <h1 className="text-3xl font-bold text-white">American Mahjong</h1>
           <p className="text-emerald-400 text-sm mt-1">Play with friends, anywhere</p>
+          <p className="text-emerald-800 text-xs mt-1">{VERSION}</p>
         </div>
 
         {mode === 'home' && (
