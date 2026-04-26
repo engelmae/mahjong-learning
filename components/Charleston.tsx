@@ -1,9 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Tile, GameState } from '@/types/game'
 import TileComponent from './Tile'
 import { submitCharlestionPass } from '@/lib/gameActions'
 import { VERSION } from '@/lib/version'
+import { useTileDrag } from '@/lib/useTileDrag'
 
 const PASS_SEQUENCE = [
   { label: '→ First Right',  dir: 'right'  },
@@ -37,7 +38,6 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [handOrder, setHandOrder] = useState<string[]>([])
-  const [movingTile, setMovingTile] = useState<string | null>(null)
 
   const me = game.players[myPlayerId]
   const alreadySubmitted = me?.charlestionReady
@@ -46,6 +46,8 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   const playersReady = Object.values(game.players).filter(p => p.charlestionReady).length
   const totalPlayers = Object.keys(game.players).length
   const hand = me?.hand ?? []
+
+  const drag = useTileDrag(handOrder, setHandOrder)
 
   // Sync hand order
   useEffect(() => {
@@ -58,44 +60,23 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     })
   }, [hand.map(t => t.id).join(',')])
 
-  // Clear selection and moving when round advances
+  // Clear selection when round advances
   useEffect(() => {
     setSelected(new Set())
-    setMovingTile(null)
   }, [roundIndex])
 
   function sortHand() {
-    const sorted = [...hand].sort(tileSort)
-    setHandOrder(sorted.map(t => t.id))
-    setMovingTile(null)
+    setHandOrder([...hand].sort(tileSort).map(t => t.id))
   }
 
   function handleTileClick(tile: Tile) {
-    if (movingTile !== null) {
-      if (movingTile === tile.id) {
-        setMovingTile(null)
-      } else {
-        setHandOrder(prev => {
-          const next = [...prev]
-          const ai = next.indexOf(movingTile)
-          const bi = next.indexOf(tile.id)
-          if (ai !== -1 && bi !== -1) [next[ai], next[bi]] = [next[bi], next[ai]]
-          return next
-        })
-        setMovingTile(null)
-      }
-    } else {
-      toggleTile(tile.id)
-    }
-  }
-
-  function toggleTile(id: string) {
+    if (drag.consumeClick()) return
     setSelected(prev => {
       const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
+      if (next.has(tile.id)) {
+        next.delete(tile.id)
       } else if (next.size < 3) {
-        next.add(id)
+        next.add(tile.id)
       }
       return next
     })
@@ -112,29 +93,25 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     }
   }
 
-  const orderedHand = handOrder.map(id => hand.find(t => t.id === id)).filter(Boolean) as Tile[]
+  const displayHand = useMemo(
+    () => drag.displayIds.map(id => hand.find(t => t.id === id)).filter(Boolean) as Tile[],
+    [drag.displayIds, hand]
+  )
 
   return (
-    <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-3">
+    <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-2">
       {/* Header */}
       <div className="flex items-start justify-between">
-        <button
-          onClick={sortHand}
-          className="text-xs text-emerald-400 hover:text-emerald-200 border border-emerald-600 hover:border-emerald-400 rounded px-2 py-1 shrink-0 font-medium"
-        >
+        <button onClick={sortHand} className="text-xs text-emerald-400 border border-emerald-600 rounded px-2 py-1 shrink-0 font-medium">
           Sort
         </button>
         <div className="flex-1 text-center">
           <h2 className="text-lg font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
           <p className="text-emerald-300 text-sm">{currentPass.label}</p>
-          <p className="text-xs text-emerald-400">
-            {playersReady}/{totalPlayers} players ready
-          </p>
+          <p className="text-xs text-emerald-400">{playersReady}/{totalPlayers} players ready</p>
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
-          <button onClick={onLeave} className="text-xs text-emerald-500 hover:text-red-400 px-1">
-            Leave
-          </button>
+          <button onClick={onLeave} className="text-xs text-emerald-500 hover:text-red-400 px-1">Leave</button>
           <span className="text-xs text-emerald-800">{VERSION}</span>
         </div>
       </div>
@@ -144,37 +121,48 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
           <div className="text-center">
             <div className="text-4xl mb-2">✅</div>
             <p className="text-emerald-300">Tiles passed! Waiting for others…</p>
-            <p className="text-xs text-emerald-500 mt-1">
-              {playersReady}/{totalPlayers} ready
-            </p>
+            <p className="text-xs text-emerald-500 mt-1">{playersReady}/{totalPlayers} ready</p>
           </div>
         </div>
       ) : (
         <>
           <p className="text-sm text-emerald-300 text-center">
-            {movingTile ? 'Tap another tile to swap' : `Tap 3 tiles to pass ${currentPass.label.toLowerCase()}`}
+            {drag.dragging ? 'Slide to position, release to drop' : `Tap 3 tiles to pass — or long-press to rearrange`}
           </p>
 
           {/* Hand */}
-          <div className="flex-1 flex items-end justify-center">
-            <div className="flex flex-wrap gap-1 justify-center">
-              {orderedHand.map(tile => (
-                <TileComponent
+          <div className="flex-1 flex items-end justify-center overflow-hidden">
+            <div
+              ref={drag.containerRef}
+              className="flex flex-wrap gap-1 justify-center"
+              style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
+              onPointerMove={drag.onMove}
+              onPointerUp={drag.onUp}
+              onPointerCancel={drag.onCancel}
+            >
+              {displayHand.map(tile => (
+                <div
                   key={tile.id}
-                  tile={tile}
-                  selected={movingTile === tile.id ? true : selected.has(tile.id)}
-                  onClick={() => handleTileClick(tile)}
-                />
+                  data-drag-id={tile.id}
+                  onPointerDown={e => drag.onTileDown(e, tile.id)}
+                  style={drag.tileStyle(tile.id)}
+                >
+                  <TileComponent
+                    tile={tile}
+                    selected={!drag.dragging && selected.has(tile.id)}
+                    onClick={() => handleTileClick(tile)}
+                  />
+                </div>
               ))}
             </div>
           </div>
 
           <button
             onClick={handleSubmit}
-            disabled={selected.size !== 3 || submitting || movingTile !== null}
+            disabled={selected.size !== 3 || submitting || drag.dragging}
             className={[
               'py-3 rounded-lg font-bold text-lg transition-all',
-              selected.size === 3 && !movingTile
+              selected.size === 3 && !drag.dragging
                 ? 'bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95'
                 : 'bg-gray-600 text-gray-400 cursor-not-allowed',
             ].join(' ')}
