@@ -255,7 +255,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
       </div>
 
       {/* My area */}
-      <div className={`shrink-0 p-2 border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
+      <div className={`shrink-0 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] border-t-2 ${isMyTurn ? 'border-yellow-400 bg-black/30' : 'border-emerald-700 bg-black/20'}`}>
         <div className="flex gap-2 mb-1 flex-wrap">
           <ExposedSets sets={me?.exposedSets ?? []} ownerId={myPlayerId} small />
           {me?.discards && me.discards.length > 0 && (

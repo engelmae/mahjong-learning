@@ -282,7 +282,7 @@ export default function GamePage({ params }: Props) {
           <div className="text-5xl">📱↔️</div>
           <p className="text-xl font-bold">Rotate your phone to landscape to play</p>
         </div>
-        <main className="h-screen bg-[#152030] overflow-hidden">
+        <main className="h-dvh bg-[#152030] overflow-hidden">
           <Charleston game={game} gameId={gameId} myPlayerId={myPlayerId} onLeave={handleLeave} />
         </main>
       </>
