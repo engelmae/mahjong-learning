@@ -343,7 +343,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         {/* Hand */}
         <div
           ref={drag.containerRef}
-          className="flex gap-0.5 overflow-x-auto flex-1 min-w-0"
+          className="flex gap-0.5 overflow-x-auto flex-1 min-w-0 pt-2 pb-0.5"
           style={{ touchAction: drag.dragging ? 'none' : 'pan-x' }}
           onPointerMove={drag.onMove}
           onPointerUp={drag.onUp}

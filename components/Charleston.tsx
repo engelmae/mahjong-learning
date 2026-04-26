@@ -142,10 +142,10 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
           </p>
 
           {/* Hand */}
-          <div className="flex-1 flex items-end justify-center overflow-hidden">
+          <div className="flex-1 flex items-end justify-center">
             <div
               ref={drag.containerRef}
-              className="flex flex-wrap gap-1 justify-center"
+              className="flex flex-wrap gap-1 justify-center pt-3 pb-1"
               style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
               onPointerMove={drag.onMove}
               onPointerUp={drag.onUp}
