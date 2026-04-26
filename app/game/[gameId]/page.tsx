@@ -29,6 +29,21 @@ export default function GamePage({ params }: Props) {
   })
   const botActed = useRef<Set<string>>(new Set())
 
+  // Track true visible viewport height via visualViewport API (reliable across Chrome iOS / Safari)
+  useEffect(() => {
+    function update() {
+      const h = window.visualViewport?.height ?? window.innerHeight
+      document.documentElement.style.setProperty('--game-h', `${h}px`)
+    }
+    update()
+    window.visualViewport?.addEventListener('resize', update)
+    window.addEventListener('resize', update)
+    return () => {
+      window.visualViewport?.removeEventListener('resize', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+
   // Restore or prompt for identity
   useEffect(() => {
     const storedId = sessionStorage.getItem(`mahjong_player_${gameId}`)
@@ -282,7 +297,7 @@ export default function GamePage({ params }: Props) {
           <div className="text-5xl">📱↔️</div>
           <p className="text-xl font-bold">Rotate your phone to landscape to play</p>
         </div>
-        <main className="h-dvh bg-[#152030] overflow-hidden">
+        <main className="bg-[#152030] overflow-hidden" style={{ height: 'var(--game-h)' }}>
           <Charleston game={game} gameId={gameId} myPlayerId={myPlayerId} onLeave={handleLeave} />
         </main>
       </>

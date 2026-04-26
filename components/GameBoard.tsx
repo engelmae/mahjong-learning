@@ -253,34 +253,38 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           ))}
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-1.5 mt-0.5 justify-center flex-wrap items-center">
-          {isMyTurn && !drewThisTurn && (
-            <button onClick={handleDraw} className="bg-emerald-500 text-white font-bold py-1.5 px-4 rounded-lg text-sm active:scale-95">
-              Draw Tile
-            </button>
-          )}
-          {isMyTurn && drewThisTurn && (
-            <>
-              <button
-                onClick={handleDiscard}
-                disabled={!selectedTile}
-                className={`font-bold py-1.5 px-4 rounded-lg text-sm transition-all ${selectedTile ? 'bg-red-500 text-white active:scale-95' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
-              >
-                Discard {selectedTile ? `(${selectedTile.label})` : '(tap a tile)'}
+        {/* Action buttons — single row, never wraps */}
+        <div className="flex items-center justify-between mt-0.5 gap-1">
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={sortHand} className="text-xs text-emerald-400 border border-emerald-700 rounded px-2 py-1">Sort</button>
+            <button onClick={onLeave} className="text-xs text-emerald-600 hover:text-red-400 py-1 px-1">Leave</button>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {isMyTurn && !drewThisTurn && (
+              <button onClick={handleDraw} className="bg-emerald-500 text-white font-bold py-1.5 px-4 rounded-lg text-sm active:scale-95">
+                Draw Tile
               </button>
-              <button onClick={handleDeclareWin} className="bg-yellow-400 text-black font-bold py-1.5 px-3 rounded-lg text-sm active:scale-95">
-                Mah Jongg! 🀄
-              </button>
-            </>
-          )}
-          {!isMyTurn && !canClaim && (
-            <p className="text-emerald-400 text-sm">
-              {game.currentTurn ? `Waiting for ${game.players[game.currentTurn]?.nickname ?? '…'}` : 'Waiting…'}
-            </p>
-          )}
-          <button onClick={sortHand} className="text-xs text-emerald-400 border border-emerald-700 rounded px-2 py-1">Sort</button>
-          <button onClick={onLeave} className="text-xs text-emerald-600 hover:text-red-400 py-1 px-1">Leave</button>
+            )}
+            {isMyTurn && drewThisTurn && (
+              <>
+                <button
+                  onClick={handleDiscard}
+                  disabled={!selectedTile}
+                  className={`font-bold py-1.5 px-3 rounded-lg text-sm transition-all ${selectedTile ? 'bg-red-500 text-white active:scale-95' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                >
+                  {selectedTile ? `Discard (${selectedTile.label})` : 'Discard'}
+                </button>
+                <button onClick={handleDeclareWin} className="bg-yellow-400 text-black font-bold py-1.5 px-3 rounded-lg text-sm active:scale-95">
+                  Mah Jongg!
+                </button>
+              </>
+            )}
+            {!isMyTurn && !canClaim && (
+              <p className="text-emerald-400 text-xs">
+                {game.currentTurn ? `Waiting for ${game.players[game.currentTurn]?.nickname ?? '…'}` : 'Waiting…'}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
