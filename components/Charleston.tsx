@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Tile, GameState } from '@/types/game'
 import TileComponent from './Tile'
 import { submitCharlestionPass } from '@/lib/gameActions'
@@ -38,6 +38,8 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [handOrder, setHandOrder] = useState<string[]>([])
+  const [receivedTileIds, setReceivedTileIds] = useState<Set<string>>(new Set())
+  const prevHandRef = useRef<string[]>([])
 
   const me = game.players[myPlayerId]
   const alreadySubmitted = me?.charlestionReady
@@ -49,20 +51,29 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
 
   const drag = useTileDrag(handOrder, setHandOrder)
 
-  // Sync hand order
+  // Sync hand order and detect received tiles (batch of 3 appear after a pass)
   useEffect(() => {
     const currentIds = hand.map(t => t.id)
     const currentIdSet = new Set(currentIds)
-    setHandOrder(prev => {
-      const retained = prev.filter(id => currentIdSet.has(id))
+    const prev = prevHandRef.current
+    setHandOrder(prevOrder => {
+      const retained = prevOrder.filter(id => currentIdSet.has(id))
       const newIds = currentIds.filter(id => !new Set(retained).has(id))
       return [...retained, ...newIds]
     })
+    // Mark newly received tiles (3 arrive at once after a round completes)
+    if (currentIds.length >= prev.length && prev.length > 0) {
+      const prevSet = new Set(prev)
+      const newIds = currentIds.filter(id => !prevSet.has(id))
+      if (newIds.length > 0) setReceivedTileIds(new Set(newIds))
+    }
+    prevHandRef.current = currentIds
   }, [hand.map(t => t.id).join(',')])
 
-  // Clear selection when round advances
+  // Clear selection and received highlights when round advances
   useEffect(() => {
     setSelected(new Set())
+    setReceivedTileIds(new Set())
   }, [roundIndex])
 
   function sortHand() {
@@ -140,20 +151,28 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
               onPointerUp={drag.onUp}
               onPointerCancel={drag.onCancel}
             >
-              {displayHand.map(tile => (
-                <div
-                  key={tile.id}
-                  data-drag-id={tile.id}
-                  onPointerDown={e => drag.onTileDown(e, tile.id)}
-                  style={drag.tileStyle(tile.id)}
-                >
-                  <TileComponent
-                    tile={tile}
-                    selected={!drag.dragging && selected.has(tile.id)}
-                    onClick={() => handleTileClick(tile)}
-                  />
-                </div>
-              ))}
+              {displayHand.map(tile => {
+                const isReceived = receivedTileIds.has(tile.id)
+                return (
+                  <div
+                    key={tile.id}
+                    data-drag-id={tile.id}
+                    onPointerDown={e => drag.onTileDown(e, tile.id)}
+                    style={{
+                      ...drag.tileStyle(tile.id),
+                      outline: isReceived && !selected.has(tile.id) ? '2px solid #34d399' : undefined,
+                      outlineOffset: '2px',
+                      borderRadius: 8,
+                    }}
+                  >
+                    <TileComponent
+                      tile={tile}
+                      selected={!drag.dragging && selected.has(tile.id)}
+                      onClick={() => handleTileClick(tile)}
+                    />
+                  </div>
+                )
+              })}
             </div>
           </div>
 
