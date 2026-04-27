@@ -148,24 +148,34 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
                 onPointerCancel={drag.onCancel}
               >
                 {displayHand.map(tile => {
-                  const isReceived = receivedTileIds.has(tile.id)
+                  const isReceived = receivedTileIds.has(tile.id) && !selected.has(tile.id)
                   return (
                     <div
                       key={tile.id}
                       data-drag-id={tile.id}
                       onPointerDown={e => drag.onTileDown(e, tile.id)}
-                      style={{
-                        ...drag.tileStyle(tile.id),
-                        outline: isReceived && !selected.has(tile.id) ? '2px solid #34d399' : undefined,
-                        outlineOffset: '2px',
-                        borderRadius: 8,
-                      }}
+                      style={drag.tileStyle(tile.id)}
                     >
-                      <TileComponent
-                        tile={tile}
-                        selected={!drag.dragging && selected.has(tile.id)}
-                        onClick={() => handleTileClick(tile)}
-                      />
+                      <div
+                        className={isReceived ? 'tile-pop' : undefined}
+                        style={{
+                          outline: isReceived ? '2px solid #34d399' : undefined,
+                          outlineOffset: '2px',
+                          borderRadius: 8,
+                          position: 'relative',
+                        }}
+                      >
+                        <TileComponent
+                          tile={tile}
+                          selected={!drag.dragging && selected.has(tile.id)}
+                          onClick={() => handleTileClick(tile)}
+                        />
+                        {isReceived && (
+                          <div style={{ position: 'absolute', inset: 0, borderRadius: 8, overflow: 'hidden', pointerEvents: 'none', zIndex: 10 }}>
+                            <div className="tile-shimmer-streak" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
