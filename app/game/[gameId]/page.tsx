@@ -2,7 +2,7 @@
 import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
-import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, submitCharlestionPass, passClaim } from '@/lib/gameActions'
+import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, submitCharlestionPass } from '@/lib/gameActions'
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
 
@@ -44,14 +44,6 @@ export default function GamePage({ params }: Props) {
     const unsub = subscribeToGame(gameId, setGame)
     return unsub
   }, [gameId])
-
-  // Auto-advance claim window when timer expires (all games)
-  useEffect(() => {
-    if (!game?.pendingClaim) return
-    const remaining = Math.max(0, game.pendingClaim.expiresAt - Date.now())
-    const t = setTimeout(() => passClaim(gameId), remaining + 300)
-    return () => clearTimeout(t)
-  }, [game?.pendingClaim?.tile?.id])
 
   // Bot engine (test mode only)
   useEffect(() => {

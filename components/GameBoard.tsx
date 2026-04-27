@@ -18,8 +18,11 @@ function tileSort(a: Tile, b: Tile): number {
   return (av as number) - (bv as number)
 }
 
-const BTN_PRIMARY = 'bg-emerald-700 hover:bg-emerald-600 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
-const BTN_ACCENT  = 'bg-yellow-400 hover:bg-yellow-300 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
+// Button colors keyed to their matching tile highlight colors
+const BTN_DRAW    = 'bg-yellow-400 hover:bg-yellow-300 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'   // matches drawn tile #facc15
+const BTN_DISCARD = 'bg-[#5aabff] hover:bg-[#7bbeff] text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'      // matches selected tile #5aabff
+const BTN_CALL    = 'bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'  // matches claim selection #34d399
+const BTN_MAHJONG = 'bg-violet-500 hover:bg-violet-400 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'    // distinct
 const BTN_MUTED   = 'bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
 const BTN_OUTLINE = 'border border-slate-500 text-slate-300 hover:bg-slate-700 font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
 
@@ -73,22 +76,33 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     prevHandRef.current = currentIds
   }, [(me?.hand ?? []).map(t => t.id).join(',')])
 
+  // Countdown display + auto-advance passClaim (frozen when player is selecting tiles to expose)
   useEffect(() => {
     if (!pending) { setShowClaim(false); return }
-    if (isMyDiscard) return
+
+    if (isMyDiscard) {
+      // Own discard: no UI needed, but still auto-advance after window closes
+      const remaining = Math.max(0, pending.expiresAt - Date.now())
+      const t = setTimeout(() => passClaim(gameId), remaining + 300)
+      return () => clearTimeout(t)
+    }
+
     setShowClaim(true)
     const tick = () => {
-      if (claimModeRef.current) return  // freeze display while player selects tiles
+      if (claimModeRef.current) return  // player pressed Call — freeze display, skip auto-advance
       const r = Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000))
       setClaimCountdown(r)
-      if (r <= 0) setShowClaim(false)
+      if (r <= 0) {
+        setShowClaim(false)
+        passClaim(gameId)
+      }
     }
     tick()
     const interval = setInterval(tick, 500)
     return () => clearInterval(interval)
   }, [pending?.tile?.id, isMyDiscard])
 
-  // Auto-cancel claim mode when timer expires
+  // Auto-cancel claim mode when window closes
   useEffect(() => {
     if (!showClaim) { setClaimMode(false); setClaimSelection([]) }
   }, [showClaim])
@@ -164,6 +178,28 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     await swapJoker(gameId, ownerId, setIndex, jokerIndex, myPlayerId, replacementTile, jokerTile)
   }
 
+  // Status text and color for the bar below opponents
+  function getStatusText(): string {
+    if (showClaim && canClaim) {
+      if (claimMode) return 'Tap tiles to expose'
+      return `${claimCountdown}s left to claim`
+    }
+    if (isMyTurn && !drewThisTurn) return 'Your turn to draw…'
+    if (isMyTurn && drewThisTurn && !selectedTile) return 'Select your discard…'
+    if (isMyTurn && drewThisTurn && selectedTile) return 'Confirm your discard…'
+    if (game.currentTurn && !isMyTurn) {
+      const name = game.players[game.currentTurn]?.nickname ?? '…'
+      return `${name}'s turn`
+    }
+    return 'Waiting…'
+  }
+
+  function getStatusColor(): string {
+    if (showClaim && canClaim) return claimMode ? 'text-emerald-400' : 'text-amber-400'
+    if (isMyTurn) return 'text-emerald-400'
+    return 'text-slate-400'
+  }
+
   // ── Finished ──────────────────────────────────────────────────────────────
   if (game.status === 'finished') {
     const winner = game.winner ? game.players[game.winner] : null
@@ -206,15 +242,15 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
   const wallLeft = Math.max(0, (game.wall?.length ?? 0) - game.wallIndex)
 
+  // Only claim/draw/discard action buttons — status text lives in the opponents status bar
   function renderActionPanel() {
     if (showClaim && canClaim) {
       if (claimMode) {
         const canExpose = claimSelection.length >= 2
         return (
           <>
-            <p className="text-slate-300 text-[10px] text-center">{claimCountdown}s left to claim</p>
-            <p className="text-slate-400 text-[10px] text-center">Tap tiles to expose</p>
-            <button onClick={handleExpose} disabled={!canExpose} className={canExpose ? BTN_PRIMARY : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
+            <button onClick={handleExpose} disabled={!canExpose}
+              className={canExpose ? BTN_CALL : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
               Expose ({claimSelection.length})
             </button>
             <button onClick={() => { setClaimMode(false); setClaimSelection([]) }} className={BTN_OUTLINE}>Cancel</button>
@@ -222,32 +258,25 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         )
       }
       return (
-        <>
-          <p className="text-slate-300 text-[10px] text-center">{claimCountdown}s left to claim</p>
-          <button onClick={() => setClaimMode(true)} className={BTN_PRIMARY}>Call</button>
-          <button onClick={handleMahjong} className={BTN_ACCENT}>Mahjong!</button>
-        </>
+        <button onClick={() => setClaimMode(true)} className={BTN_CALL}>Call</button>
       )
     }
     if (isMyTurn && !drewThisTurn) {
-      return <button onClick={handleDraw} className={BTN_PRIMARY}>Draw</button>
+      return <button onClick={handleDraw} className={BTN_DRAW}>Draw</button>
     }
     if (isMyTurn && drewThisTurn) {
       return (
-        <>
-          <button onClick={handleDiscard} disabled={!selectedTile} className={selectedTile ? BTN_PRIMARY : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
-            Discard
-          </button>
-          <button onClick={handleMahjong} className={BTN_ACCENT}>Mahjong!</button>
-        </>
+        <button onClick={handleDiscard} disabled={!selectedTile}
+          className={selectedTile ? BTN_DISCARD : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
+          Discard
+        </button>
       )
     }
-    return (
-      <p className="text-slate-400 text-[10px] text-center leading-snug">
-        {game.currentTurn ? `${game.players[game.currentTurn]?.nickname ?? '…'}'s turn` : 'Waiting…'}
-      </p>
-    )
+    return null
   }
+
+  // Mahjong button shows in bottom strip (left of Sort/Exit) when relevant
+  const showMahjongBtn = (isMyTurn && drewThisTurn) || (showClaim && canClaim && !claimMode)
 
   // ── Main layout ────────────────────────────────────────────────────────────
   return (
@@ -256,7 +285,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
       {/* Top: opponents (left) + info panel (right) */}
       <div className="flex-1 flex gap-1.5 p-1.5 overflow-hidden min-h-0">
 
-        {/* Opponent rows */}
+        {/* Opponent rows + status bar */}
         <div className="flex-1 flex flex-col gap-1 overflow-hidden min-h-0 min-w-0">
           {opponents.map(pid => {
             const opp = game.players[pid]
@@ -300,13 +329,19 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               </div>
             )
           })}
+
+          {/* Status bar: wall count far left, turn/claim status to the right */}
+          <div className="flex items-center gap-2 px-1 mt-auto shrink-0">
+            <p className="text-[9px] text-slate-600 shrink-0 whitespace-nowrap leading-none">{wallLeft} in wall · {VERSION}</p>
+            <p className={`text-[10px] font-bold ${getStatusColor()} flex-1 text-center leading-none`}>{getStatusText()}</p>
+          </div>
         </div>
 
-        {/* Right: info + action panel */}
+        {/* Right: last discard + action buttons + discards */}
         <div className="shrink-0 w-[108px] flex flex-col gap-1.5 items-center">
           {/* Last discarded tile */}
           {lastDiscardTile ? (
-            <div className={`flex flex-col items-center gap-0.5 ${canClaim ? 'ring-2 ring-yellow-400 rounded-lg p-0.5' : ''}`}>
+            <div className={`flex flex-col items-center gap-0.5 ${canClaim ? 'ring-2 ring-amber-400 rounded-lg p-0.5' : ''}`}>
               <TileComponent tile={lastDiscardTile} />
               {lastDiscardBy && <span className="text-[9px] text-slate-400 text-center">{lastDiscardBy}</span>}
             </div>
@@ -316,23 +351,19 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             </div>
           )}
 
-          {/* Action panel */}
+          {/* Action panel — buttons only */}
           <div className="flex flex-col gap-1 w-full">
-            {isMyTurn && !showClaim && (
-              <p className="text-emerald-400 text-[10px] font-bold text-center tracking-wide">YOUR TURN</p>
-            )}
             {renderActionPanel()}
           </div>
 
-          {/* Spacer + meta */}
-          <div className="mt-auto flex flex-col items-center gap-1 w-full">
+          {/* Discards button */}
+          <div className="mt-auto w-full">
             <button
               onClick={() => setShowDiscards(true)}
               className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all w-full"
             >
               Discards »
             </button>
-            <p className="text-[9px] text-slate-700 text-center">{wallLeft} in wall · {VERSION}</p>
           </div>
         </div>
       </div>
@@ -388,6 +419,19 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             )
           })}
         </div>
+
+        {/* Mahjong button — left of Sort/Exit, shown when declaration is possible */}
+        {showMahjongBtn && (
+          <div className="self-stretch flex pl-1 shrink-0">
+            <button
+              onClick={handleMahjong}
+              className="bg-violet-500 hover:bg-violet-400 text-white text-[11px] font-bold rounded-lg px-2 active:scale-95 transition-all text-center w-full"
+              style={{ minWidth: 50 }}
+            >
+              Mahjong!
+            </button>
+          </div>
+        )}
 
         {/* Sort + Exit */}
         <div className="flex flex-col gap-1.5 shrink-0 items-stretch pl-1.5" style={{ minWidth: 62 }}>
