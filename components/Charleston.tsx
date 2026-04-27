@@ -110,7 +110,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   )
 
   return (
-    <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-2">
+    <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-2" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
       {/* Header */}
       <div className="flex items-center gap-2">
         <div className="flex flex-col gap-1.5 shrink-0" style={{ minWidth: 62 }}>

@@ -217,8 +217,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               <div key={pid} className={`rounded-lg p-2 ${pid === game.winner ? 'bg-yellow-900/40 ring-2 ring-yellow-400' : 'bg-black/20'}`}>
                 <p className="font-bold mb-1 text-sm">{p.nickname}{pid === game.winner ? ' 👑' : ''}</p>
                 <div className="flex flex-wrap gap-0.5">
-                  {p.hand.map(t => <TileComponent key={t.id} tile={t} small />)}
-                  {p.exposedSets.flatMap((s, si) => s.tiles.map((t, ti) => (
+                  {(p.hand ?? []).map(t => <TileComponent key={t.id} tile={t} small />)}
+                  {(p.exposedSets ?? []).flatMap((s, si) => s.tiles.map((t, ti) => (
                     <TileComponent key={`${si}-${ti}`} tile={t} small />
                   )))}
                 </div>
@@ -280,7 +280,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
   // ── Main layout ────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full bg-[#152030] text-white overflow-hidden">
+    <div className="flex flex-col h-full bg-[#152030] text-white overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
 
       {/* Top: opponents (left) + info panel (right) */}
       <div className="flex-1 flex gap-1.5 p-1.5 overflow-hidden min-h-0">
@@ -297,7 +297,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             ).slice(0, 8)
 
             return (
-              <div key={pid} className={`rounded px-1 py-0.5 shrink-0 ${isOppTurn ? 'bg-yellow-600/20 ring-1 ring-yellow-500/60' : 'bg-black/20'}`}>
+              <div key={pid} className={`rounded px-1 py-0.5 shrink-0 border ${isOppTurn ? 'bg-yellow-600/20 border-yellow-500/60' : 'bg-black/20 border-transparent'}`}>
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-semibold shrink-0 w-14 truncate">{opp.nickname}</span>
                   <div className="flex gap-0.5 overflow-hidden flex-1 min-w-0">
