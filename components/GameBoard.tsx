@@ -328,7 +328,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           <div className="mt-auto flex flex-col items-center gap-1 w-full">
             <button
               onClick={() => setShowDiscards(true)}
-              className="text-xs text-slate-500 hover:text-slate-300 w-full text-center py-1"
+              className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all w-full"
             >
               Discards »
             </button>

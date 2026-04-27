@@ -119,62 +119,80 @@ export default function GamePage({ params }: Props) {
     }
   }
 
+  // ── Shared layout helpers ─────────────────────────────────────────────────
+  const UtilScreen = ({ children }: { children: React.ReactNode }) => (
+    <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-4 overflow-auto">
+      {children}
+    </main>
+  )
+  const TwoCol = ({ left, right }: { left: React.ReactNode; right: React.ReactNode }) => (
+    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 w-full max-w-2xl">
+      <div className="text-center sm:text-left sm:w-48 shrink-0">{left}</div>
+      <div className="w-full max-w-sm sm:flex-1">{right}</div>
+    </div>
+  )
+  const Brand = ({ sub }: { sub?: string }) => (
+    <>
+      <div className="text-4xl mb-1">🀄</div>
+      <h1 className="text-white font-bold text-lg">American Mahjong</h1>
+      {sub && <p className="text-emerald-400 text-sm mt-0.5">{sub}</p>}
+    </>
+  )
+
   // ── Nickname modal ────────────────────────────────────────────────────────
   if (showNicknameModal) {
     return (
-      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
-        <div className="bg-[#152030] rounded-2xl p-6 w-full max-w-sm space-y-4">
-          <div className="text-center">
-            <div className="text-4xl mb-2">🀄</div>
-            <h2 className="text-white font-bold text-xl">Join Game</h2>
-            <p className="text-emerald-400 text-sm">Code: {gameId}</p>
-          </div>
-          <input
-            type="text"
-            placeholder="Your nickname"
-            value={nickname}
-            onChange={e => { setNickname(e.target.value); setError('') }}
-            onKeyDown={e => e.key === 'Enter' && handleJoin()}
-            maxLength={20}
-            autoFocus
-            className="w-full bg-emerald-800 text-white rounded-lg px-4 py-3 placeholder-emerald-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-          />
-          {error && <p className="text-red-400 text-sm">{error}</p>}
-          <button
-            onClick={handleJoin}
-            disabled={joining}
-            className="w-full bg-yellow-400 text-black font-bold py-3 rounded-lg hover:bg-yellow-300 active:scale-95 transition-all disabled:opacity-50"
-          >
-            {joining ? 'Joining…' : 'Join Game'}
-          </button>
-          <button onClick={() => router.push('/')} className="w-full text-emerald-400 text-sm hover:text-emerald-300">
-            ← Back to home
-          </button>
-        </div>
-      </main>
+      <UtilScreen>
+        <TwoCol
+          left={<Brand sub={`Game: ${gameId}`} />}
+          right={
+            <div className="bg-[#152030] rounded-2xl p-5 space-y-3 border border-slate-700/50">
+              <h2 className="text-white font-bold text-lg">Enter your name</h2>
+              <input
+                type="text"
+                placeholder="Nickname"
+                value={nickname}
+                onChange={e => { setNickname(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleJoin()}
+                maxLength={20}
+                autoFocus
+                className="w-full bg-[#1c2e42] text-white rounded-lg px-4 py-3 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 border border-slate-700"
+              />
+              {error && <p className="text-amber-400 text-sm">{error}</p>}
+              <button onClick={handleJoin} disabled={joining}
+                className="w-full bg-yellow-400 text-black font-bold py-3 rounded-lg hover:bg-yellow-300 active:scale-95 transition-all disabled:opacity-50">
+                {joining ? 'Joining…' : 'Join Game'}
+              </button>
+              <button onClick={() => router.push('/')} className="w-full text-slate-400 text-sm hover:text-slate-200 py-1 transition-colors">
+                ← Back to home
+              </button>
+            </div>
+          }
+        />
+      </UtilScreen>
     )
   }
 
   // ── Loading ───────────────────────────────────────────────────────────────
   if (!game || !myPlayerId) {
     return (
-      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center">
+      <UtilScreen>
         <div className="text-emerald-300 text-lg animate-pulse">Loading game…</div>
-      </main>
+      </UtilScreen>
     )
   }
 
   // ── Not in game ───────────────────────────────────────────────────────────
   if (!game.players[myPlayerId]) {
     return (
-      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
+      <UtilScreen>
         <div className="text-center text-white space-y-4">
-          <p className="text-red-400">You are not in this game.</p>
-          <button onClick={() => router.push('/')} className="bg-yellow-400 text-black font-bold py-2 px-6 rounded-lg">
+          <p className="text-amber-400">You are not in this game.</p>
+          <button onClick={() => router.push('/')} className="bg-yellow-400 text-black font-bold py-2 px-6 rounded-lg hover:bg-yellow-300 active:scale-95">
             Home
           </button>
         </div>
-      </main>
+      </UtilScreen>
     )
   }
 
@@ -185,92 +203,86 @@ export default function GamePage({ params }: Props) {
   // ── Waiting lobby ─────────────────────────────────────────────────────────
   if (game.status === 'waiting') {
     return (
-      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
-        <div className="w-full max-w-sm space-y-5">
-          <div className="text-center">
-            <div className="text-4xl mb-1">🀄</div>
-            <h1 className="text-white font-bold text-xl">Game Lobby</h1>
-            <p className="text-emerald-400 text-sm">Code: <span className="font-mono font-bold text-white">{gameId}</span></p>
-          </div>
+      <UtilScreen>
+        <TwoCol
+          left={
+            <>
+              <Brand sub="Game Lobby" />
+              <p className="text-sm text-slate-400 mt-1">Code: <span className="font-mono font-bold text-white">{gameId}</span></p>
+            </>
+          }
+          right={
+            <div className="space-y-3 w-full">
+              {botIds.length > 0 ? (
+                <div className="bg-emerald-900/40 border border-emerald-700/50 rounded-xl p-4">
+                  <p className="text-emerald-300 text-sm font-semibold text-center">Solo Test Mode</p>
+                  <p className="text-emerald-500 text-xs text-center mt-1">3 bots will play automatically</p>
+                </div>
+              ) : (
+                <div className="bg-[#152030] rounded-xl p-4 space-y-2 border border-slate-700/50">
+                  <p className="text-slate-300 text-sm font-medium">Share with friends:</p>
+                  <div className="flex gap-2">
+                    <code className="flex-1 bg-[#0f1923] text-slate-300 text-xs rounded px-2 py-2 truncate border border-slate-700">
+                      {typeof window !== 'undefined' ? window.location.href : ''}
+                    </code>
+                    <button onClick={copyLink}
+                      className="bg-yellow-400 text-black font-bold px-3 py-2 rounded text-sm hover:bg-yellow-300 shrink-0 active:scale-95 transition-all">
+                      {copied ? '✓' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-          {/* Share link / test mode banner */}
-          {botIds.length > 0 ? (
-            <div className="bg-emerald-900/50 border border-emerald-600 rounded-xl p-4">
-              <p className="text-emerald-300 text-sm font-medium text-center">Solo Test Mode</p>
-              <p className="text-emerald-500 text-xs text-center mt-1">3 bots will play automatically</p>
-            </div>
-          ) : (
-            <div className="bg-[#152030] rounded-xl p-4 space-y-2">
-              <p className="text-emerald-300 text-sm font-medium">Share this link with friends:</p>
-              <div className="flex gap-2">
-                <code className="flex-1 bg-emerald-800 text-white text-xs rounded px-2 py-2 truncate">
-                  {typeof window !== 'undefined' ? window.location.href : ''}
-                </code>
-                <button
-                  onClick={copyLink}
-                  className="bg-yellow-400 text-black font-bold px-3 py-2 rounded text-sm hover:bg-yellow-300 shrink-0"
-                >
-                  {copied ? '✓' : 'Copy'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Players */}
-          <div className="bg-[#152030] rounded-xl p-4 space-y-2">
-            <p className="text-emerald-300 text-sm font-medium">Players ({playerCount}/4):</p>
-            {players.map(p => (
-              <div key={p.seatIndex} className="flex items-center gap-2 text-white">
-                <span className="text-emerald-400">#{p.seatIndex + 1}</span>
-                <span className="font-medium">{p.nickname}</span>
-                {game.players[game.hostId]?.seatIndex === p.seatIndex && (
-                  <span className="text-xs bg-yellow-400 text-black px-1 rounded">Host</span>
+              <div className="bg-[#152030] rounded-xl p-4 space-y-1.5 border border-slate-700/50">
+                <p className="text-slate-300 text-sm font-medium mb-2">Players ({playerCount}/4)</p>
+                {players.map(p => (
+                  <div key={p.seatIndex} className="flex items-center gap-2 text-white text-sm">
+                    <span className="text-emerald-500">#{p.seatIndex + 1}</span>
+                    <span>{p.nickname}</span>
+                    {game.players[game.hostId]?.seatIndex === p.seatIndex && (
+                      <span className="text-[10px] bg-yellow-400 text-black px-1.5 py-0.5 rounded font-bold">Host</span>
+                    )}
+                  </div>
+                ))}
+                {playerCount < 4 && (
+                  <p className="text-slate-500 text-xs pt-1">Waiting for {4 - playerCount} more…</p>
                 )}
               </div>
-            ))}
-            {playerCount < 4 && (
-              <p className="text-emerald-500 text-xs">Waiting for {4 - playerCount} more player{4 - playerCount !== 1 ? 's' : ''}…</p>
-            )}
-          </div>
 
-          {isHost && playerCount === 4 && (
-            <button
-              onClick={handleDeal}
-              disabled={dealing}
-              className="w-full bg-yellow-400 text-black font-bold py-4 rounded-xl text-lg hover:bg-yellow-300 active:scale-95 transition-all disabled:opacity-50"
-            >
-              {dealing ? 'Dealing…' : 'Deal Tiles & Start!'}
-            </button>
-          )}
-          {!isHost && (
-            <p className="text-center text-emerald-400 text-sm">
-              {playerCount < 4 ? 'Waiting for more players…' : 'Waiting for host to deal…'}
-            </p>
-          )}
-          <button
-            onClick={handleLeave}
-            className="w-full text-emerald-500 hover:text-red-400 text-sm py-2"
-          >
-            Leave Game
-          </button>
-        </div>
-      </main>
+              {isHost && playerCount === 4 && (
+                <button onClick={handleDeal} disabled={dealing}
+                  className="w-full bg-yellow-400 text-black font-bold py-3 rounded-xl text-lg hover:bg-yellow-300 active:scale-95 transition-all disabled:opacity-50">
+                  {dealing ? 'Dealing…' : 'Deal Tiles & Start!'}
+                </button>
+              )}
+              {!isHost && (
+                <p className="text-center text-slate-400 text-sm py-1">
+                  {playerCount < 4 ? 'Waiting for more players…' : 'Waiting for host to deal…'}
+                </p>
+              )}
+              <button onClick={handleLeave} className="w-full text-slate-500 hover:text-slate-300 text-sm py-1.5 transition-colors">
+                Leave Game
+              </button>
+            </div>
+          }
+        />
+      </UtilScreen>
     )
   }
 
   // ── Abandoned ─────────────────────────────────────────────────────────────
   if (game.status === 'abandoned') {
     return (
-      <main className="min-h-screen bg-[#0f1923] flex items-center justify-center p-6">
+      <UtilScreen>
         <div className="text-center space-y-4">
           <div className="text-5xl">😔</div>
           <h2 className="text-white font-bold text-xl">Game Ended</h2>
-          <p className="text-emerald-400">A player left the game.</p>
-          <button onClick={() => router.push('/')} className="bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg hover:bg-yellow-300">
+          <p className="text-slate-400">A player left the game.</p>
+          <button onClick={() => router.push('/')} className="bg-yellow-400 text-black font-bold py-3 px-8 rounded-lg hover:bg-yellow-300 active:scale-95">
             Back to Home
           </button>
         </div>
-      </main>
+      </UtilScreen>
     )
   }
 
