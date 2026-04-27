@@ -47,6 +47,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const claimModeRef = useRef(false)
   claimModeRef.current = claimMode
   const justClaimedRef = useRef(false)
+  const [exposedSetOrder, setExposedSetOrder] = useState<string[]>([])
+  const setDrag = useTileDrag(exposedSetOrder, setExposedSetOrder)
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
@@ -107,6 +109,17 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   useEffect(() => {
     if (!showClaim) { setClaimMode(false); setClaimSelection([]) }
   }, [showClaim])
+
+  // Keep exposedSetOrder in sync when new sets are added
+  useEffect(() => {
+    const count = me?.exposedSets?.length ?? 0
+    const validIds = Array.from({ length: count }, (_, i) => `eset-${i}`)
+    setExposedSetOrder(prev => {
+      const retained = prev.filter(id => validIds.includes(id))
+      const newIds = validIds.filter(id => !retained.includes(id))
+      return [...retained, ...newIds]
+    })
+  }, [me?.exposedSets?.length])
 
   useEffect(() => {
     if (justClaimedRef.current) {
@@ -385,17 +398,35 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
       {/* My area — glows emerald when it's my turn */}
       <div className={`shrink-0 flex items-center gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t-2 bg-black/20 transition-colors ${isMyTurn ? 'border-emerald-400 shadow-[0_-3px_12px_rgba(52,211,153,0.25)]' : 'border-slate-700/50'}`}>
 
-        {/* Exposed sets — each set in its own amber box with type label */}
+        {/* Exposed sets — draggable to reorder, long-press same as tiles */}
         {(me?.exposedSets?.length ?? 0) > 0 && (
-          <div className="flex gap-1 shrink-0 pr-1.5 border-r-2 border-slate-500 overflow-x-auto max-w-[35%] items-center">
-            {(me?.exposedSets ?? []).map((set, si) => (
-              <div key={si} className="relative flex gap-0.5 bg-amber-900/60 border border-amber-500/70 rounded-md px-0.5 pt-3 pb-0.5 shrink-0">
-                <span className="absolute top-0.5 left-0 right-0 text-center text-[7px] text-amber-300 font-bold leading-none tracking-wide">
-                  {set.claimType.toUpperCase()}
-                </span>
-                {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} small />)}
-              </div>
-            ))}
+          <div
+            ref={setDrag.containerRef}
+            className={`flex gap-1 shrink-0 pr-1.5 border-r-2 border-slate-500 max-w-[35%] items-center ${setDrag.dragging ? 'overflow-visible' : 'overflow-x-auto'}`}
+            style={{ touchAction: setDrag.dragging ? 'none' : 'pan-x' }}
+            onPointerMove={setDrag.onMove}
+            onPointerUp={setDrag.onUp}
+            onPointerCancel={setDrag.onCancel}
+          >
+            {setDrag.displayIds.map(eid => {
+              const si = parseInt(eid.replace('eset-', ''))
+              const set = (me?.exposedSets ?? [])[si]
+              if (!set) return null
+              return (
+                <div
+                  key={eid}
+                  data-drag-id={eid}
+                  onPointerDown={e => setDrag.onTileDown(e, eid)}
+                  style={setDrag.tileStyle(eid)}
+                  className="relative flex gap-0.5 bg-amber-900/60 border border-amber-500/70 rounded-md px-0.5 pt-3 pb-0.5 shrink-0"
+                >
+                  <span className="absolute top-0.5 left-0 right-0 text-center text-[7px] text-amber-300 font-bold leading-none tracking-wide">
+                    {set.claimType.toUpperCase()}
+                  </span>
+                  {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} small />)}
+                </div>
+              )
+            })}
           </div>
         )}
 

@@ -129,45 +129,47 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-emerald-300 flex-1 text-center">
-              {drag.dragging ? 'Slide to position, release to drop' : `Tap 3 tiles to pass — or long-press to rearrange`}
-            </p>
-            <button onClick={sortHand} className="shrink-0 bg-slate-600 hover:bg-slate-500 text-white text-xs font-semibold rounded-lg px-2.5 py-1.5 active:scale-95 transition-all">Sort</button>
-          </div>
+          <p className="text-sm text-emerald-300 text-center">
+            {drag.dragging ? 'Slide to position, release to drop' : `Tap 3 tiles to pass — or long-press to rearrange`}
+          </p>
 
-          {/* Hand */}
-          <div className="flex-1 flex items-end justify-center">
-            <div
-              ref={drag.containerRef}
-              className="flex flex-wrap gap-1 justify-center pt-3 pb-1"
-              style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
-              onPointerMove={drag.onMove}
-              onPointerUp={drag.onUp}
-              onPointerCancel={drag.onCancel}
-            >
-              {displayHand.map(tile => {
-                const isReceived = receivedTileIds.has(tile.id)
-                return (
-                  <div
-                    key={tile.id}
-                    data-drag-id={tile.id}
-                    onPointerDown={e => drag.onTileDown(e, tile.id)}
-                    style={{
-                      ...drag.tileStyle(tile.id),
-                      outline: isReceived && !selected.has(tile.id) ? '2px solid #34d399' : undefined,
-                      outlineOffset: '2px',
-                      borderRadius: 8,
-                    }}
-                  >
-                    <TileComponent
-                      tile={tile}
-                      selected={!drag.dragging && selected.has(tile.id)}
-                      onClick={() => handleTileClick(tile)}
-                    />
-                  </div>
-                )
-              })}
+          {/* Hand with Sort just above it */}
+          <div className="flex-1 flex flex-col justify-end">
+            <div className="flex justify-end mb-1 pr-1">
+              <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all">Sort</button>
+            </div>
+            <div className="flex justify-center">
+              <div
+                ref={drag.containerRef}
+                className="flex flex-wrap gap-1 justify-center pt-3 pb-1"
+                style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
+                onPointerMove={drag.onMove}
+                onPointerUp={drag.onUp}
+                onPointerCancel={drag.onCancel}
+              >
+                {displayHand.map(tile => {
+                  const isReceived = receivedTileIds.has(tile.id)
+                  return (
+                    <div
+                      key={tile.id}
+                      data-drag-id={tile.id}
+                      onPointerDown={e => drag.onTileDown(e, tile.id)}
+                      style={{
+                        ...drag.tileStyle(tile.id),
+                        outline: isReceived && !selected.has(tile.id) ? '2px solid #34d399' : undefined,
+                        outlineOffset: '2px',
+                        borderRadius: 8,
+                      }}
+                    >
+                      <TileComponent
+                        tile={tile}
+                        selected={!drag.dragging && selected.has(tile.id)}
+                        onClick={() => handleTileClick(tile)}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
         </>
@@ -182,7 +184,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
             onClick={handleSubmit}
             disabled={selected.size !== 3 || submitting || drag.dragging}
             className={[
-              'flex-1 py-2 rounded-lg font-semibold text-sm transition-all',
+              'flex-1 py-3 rounded-lg font-bold text-lg transition-all',
               selected.size === 3 && !drag.dragging
                 ? 'bg-[#5aabff] hover:bg-[#7bbeff] text-black active:scale-95'
                 : 'bg-gray-600 text-gray-400 cursor-not-allowed',
