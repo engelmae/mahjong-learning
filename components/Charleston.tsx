@@ -111,19 +111,14 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
 
   return (
     <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-2" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <div className="flex flex-col gap-1.5 shrink-0" style={{ minWidth: 62 }}>
-          <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center">Sort</button>
-          <button onClick={onLeave} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center">Exit</button>
-        </div>
-        <div className="flex-1 text-center">
-          <h2 className="text-base font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
-          <p className="text-emerald-300 text-sm">{currentPass.label}</p>
-          <p className="text-xs text-emerald-500">{playersReady}/{totalPlayers} ready · <span className="text-slate-700">{VERSION}</span></p>
-        </div>
+      {/* Header: title/info centered */}
+      <div className="text-center">
+        <h2 className="text-base font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
+        <p className="text-emerald-300 text-sm">{currentPass.label}</p>
+        <p className="text-xs text-emerald-500">{playersReady}/{totalPlayers} ready · <span className="text-slate-700">{VERSION}</span></p>
       </div>
 
+      {/* Body */}
       {alreadySubmitted ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
@@ -172,21 +167,32 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
               })}
             </div>
           </div>
+        </>
+      )}
 
+      {/* Footer: Pass button (when active) + Sort/Exit always bottom-right */}
+      <div className="flex items-end gap-1.5">
+        {alreadySubmitted ? (
+          <div className="flex-1" />
+        ) : (
           <button
             onClick={handleSubmit}
             disabled={selected.size !== 3 || submitting || drag.dragging}
             className={[
-              'py-3 rounded-lg font-bold text-lg transition-all',
+              'flex-1 py-2 rounded-lg font-semibold text-sm transition-all',
               selected.size === 3 && !drag.dragging
-                ? 'bg-yellow-400 text-black hover:bg-yellow-300 active:scale-95'
+                ? 'bg-[#5aabff] hover:bg-[#7bbeff] text-black active:scale-95'
                 : 'bg-gray-600 text-gray-400 cursor-not-allowed',
             ].join(' ')}
           >
             {submitting ? 'Passing…' : `Pass ${selected.size}/3 tiles`}
           </button>
-        </>
-      )}
+        )}
+        <div className="flex flex-col gap-1.5 shrink-0" style={{ minWidth: 62 }}>
+          <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center">Sort</button>
+          <button onClick={onLeave} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center">Exit</button>
+        </div>
+      </div>
     </div>
   )
 }

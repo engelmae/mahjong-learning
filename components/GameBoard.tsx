@@ -19,9 +19,9 @@ function tileSort(a: Tile, b: Tile): number {
 }
 
 // Button colors keyed to their matching tile highlight colors
-const BTN_DRAW    = 'bg-yellow-400 hover:bg-yellow-300 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'   // matches drawn tile #facc15
+const BTN_DRAW    = 'bg-emerald-400 hover:bg-emerald-300 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'   // matches drawn tile #34d399
 const BTN_DISCARD = 'bg-[#5aabff] hover:bg-[#7bbeff] text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'      // matches selected tile #5aabff
-const BTN_CALL    = 'bg-emerald-500 hover:bg-emerald-400 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'  // matches claim selection #34d399
+const BTN_CALL    = 'bg-amber-500 hover:bg-amber-400 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'       // matches exposed set amber / claim selection #f59e0b
 const BTN_MAHJONG = 'bg-violet-500 hover:bg-violet-400 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'    // distinct
 const BTN_MUTED   = 'bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
 const BTN_OUTLINE = 'border border-slate-500 text-slate-300 hover:bg-slate-700 font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
@@ -356,8 +356,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             {renderActionPanel()}
           </div>
 
-          {/* Discards button */}
-          <div className="mt-auto w-full">
+          {/* Mahjong + Discards stacked at bottom */}
+          <div className="mt-auto w-full flex flex-col gap-1">
+            {showMahjongBtn && (
+              <button onClick={handleMahjong} className={BTN_MAHJONG}>Mahjong!</button>
+            )}
             <button
               onClick={() => setShowDiscards(true)}
               className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all w-full"
@@ -404,7 +407,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                 onPointerDown={e => drag.onTileDown(e, tile.id)}
                 style={{
                   ...drag.tileStyle(tile.id),
-                  outline: isClaimSel ? '2px solid #34d399' : (isDrawn && selectedTile?.id !== tile.id ? '2px solid #facc15' : undefined),
+                  outline: isClaimSel ? '2px solid #f59e0b' : (isDrawn && selectedTile?.id !== tile.id ? '2px solid #34d399' : undefined),
                   outlineOffset: '2px',
                   borderRadius: 8,
                 }}
@@ -419,19 +422,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             )
           })}
         </div>
-
-        {/* Mahjong button — left of Sort/Exit, shown when declaration is possible */}
-        {showMahjongBtn && (
-          <div className="self-stretch flex pl-1 shrink-0">
-            <button
-              onClick={handleMahjong}
-              className="bg-violet-500 hover:bg-violet-400 text-white text-[11px] font-bold rounded-lg px-2 active:scale-95 transition-all text-center w-full"
-              style={{ minWidth: 50 }}
-            >
-              Mahjong!
-            </button>
-          </div>
-        )}
 
         {/* Sort + Exit */}
         <div className="flex flex-col gap-1.5 shrink-0 items-stretch pl-1.5" style={{ minWidth: 62 }}>
