@@ -204,29 +204,29 @@ export default function GamePage({ params }: Props) {
             </>
           }
           right={
-            <div className="space-y-3 w-full">
+            <div className="space-y-2 w-full">
               {botIds.length > 0 ? (
-                <div className="bg-emerald-900/40 border border-emerald-700/50 rounded-xl p-4">
+                <div className="bg-emerald-900/40 border border-emerald-700/50 rounded-xl px-3 py-2">
                   <p className="text-emerald-300 text-sm font-semibold text-center">Solo Test Mode</p>
-                  <p className="text-emerald-500 text-xs text-center mt-1">3 bots will play automatically</p>
+                  <p className="text-emerald-500 text-xs text-center">3 bots will play automatically</p>
                 </div>
               ) : (
-                <div className="bg-[#152030] rounded-xl p-4 space-y-2 border border-slate-700/50">
+                <div className="bg-[#152030] rounded-xl px-3 py-2 space-y-1.5 border border-slate-700/50">
                   <p className="text-slate-300 text-sm font-medium">Share with friends:</p>
                   <div className="flex gap-2">
-                    <code className="flex-1 bg-[#0f1923] text-slate-300 text-xs rounded px-2 py-2 truncate border border-slate-700">
+                    <code className="flex-1 bg-[#0f1923] text-slate-300 text-xs rounded px-2 py-1.5 truncate border border-slate-700">
                       {typeof window !== 'undefined' ? window.location.href : ''}
                     </code>
                     <button onClick={copyLink}
-                      className="bg-yellow-400 text-black font-bold px-3 py-2 rounded text-sm hover:bg-yellow-300 shrink-0 active:scale-95 transition-all">
+                      className="bg-yellow-400 text-black font-bold px-3 py-1.5 rounded text-sm hover:bg-yellow-300 shrink-0 active:scale-95 transition-all">
                       {copied ? '✓' : 'Copy'}
                     </button>
                   </div>
                 </div>
               )}
 
-              <div className="bg-[#152030] rounded-xl p-4 space-y-1.5 border border-slate-700/50">
-                <p className="text-slate-300 text-sm font-medium mb-2">Players ({playerCount}/4)</p>
+              <div className="bg-[#152030] rounded-xl px-3 py-2 space-y-1 border border-slate-700/50">
+                <p className="text-slate-300 text-sm font-medium mb-1">Players ({playerCount}/4)</p>
                 {players.map(p => (
                   <div key={p.seatIndex} className="flex items-center gap-2 text-white text-sm">
                     <span className="text-emerald-500">#{p.seatIndex + 1}</span>
@@ -237,22 +237,22 @@ export default function GamePage({ params }: Props) {
                   </div>
                 ))}
                 {playerCount < 4 && (
-                  <p className="text-slate-500 text-xs pt-1">Waiting for {4 - playerCount} more…</p>
+                  <p className="text-slate-500 text-xs pt-0.5">Waiting for {4 - playerCount} more…</p>
                 )}
               </div>
 
               {isHost && playerCount === 4 && (
                 <button onClick={handleDeal} disabled={dealing}
-                  className="w-full bg-yellow-400 text-black font-bold py-3 rounded-xl text-lg hover:bg-yellow-300 active:scale-95 transition-all disabled:opacity-50">
+                  className="w-full bg-yellow-400 text-black font-bold py-2.5 rounded-xl text-base hover:bg-yellow-300 active:scale-95 transition-all disabled:opacity-50">
                   {dealing ? 'Dealing…' : 'Deal Tiles & Start!'}
                 </button>
               )}
               {!isHost && (
-                <p className="text-center text-slate-400 text-sm py-1">
+                <p className="text-center text-slate-400 text-sm py-0.5">
                   {playerCount < 4 ? 'Waiting for more players…' : 'Waiting for host to deal…'}
                 </p>
               )}
-              <button onClick={handleLeave} className="w-full text-slate-500 hover:text-slate-300 text-sm py-1.5 transition-colors">
+              <button onClick={handleLeave} className="w-full text-slate-500 hover:text-slate-300 text-sm py-1 transition-colors">
                 Leave Game
               </button>
             </div>

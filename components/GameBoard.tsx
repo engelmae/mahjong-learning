@@ -46,6 +46,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const prevHandRef = useRef<string[]>([])
   const claimModeRef = useRef(false)
   claimModeRef.current = claimMode
+  const justClaimedRef = useRef(false)
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
@@ -108,7 +109,12 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   }, [showClaim])
 
   useEffect(() => {
-    setDrewThisTurn(false)
+    if (justClaimedRef.current) {
+      justClaimedRef.current = false
+      setDrewThisTurn(true)   // stay in discard mode after claiming
+    } else {
+      setDrewThisTurn(false)
+    }
     setSelectedTile(null)
     setDrawnTileId(null)
   }, [game.currentTurn])
@@ -156,6 +162,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     if (!pending || claimSelection.length < 2) return
     const type = claimSelection.length >= 3 ? 'kong' : 'pung'
     const tiles = (me?.hand ?? []).filter(t => claimSelection.includes(t.id))
+    justClaimedRef.current = true   // signal: when currentTurn fires, stay in discard mode
     await claimDiscard(gameId, myPlayerId, type, tiles, pending.tile)
     setClaimMode(false)
     setClaimSelection([])
@@ -204,29 +211,33 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   if (game.status === 'finished') {
     const winner = game.winner ? game.players[game.winner] : null
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-[#152030] text-white gap-4 p-4 overflow-y-auto">
-        <div className="text-5xl">🀄</div>
-        <h2 className="text-2xl font-bold">Mahjong!</h2>
-        {winner && (
-          <p className="text-lg text-yellow-300">{game.winner === myPlayerId ? '🎉 You won!' : `${winner.nickname} wins!`}</p>
-        )}
-        <div className="w-full space-y-2">
+      <div className="flex flex-col h-full bg-[#152030] text-white gap-2 p-3 overflow-y-auto" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="flex items-center gap-2">
+          <span className="text-3xl">🀄</span>
+          <div>
+            <h2 className="text-xl font-bold leading-tight">Mahjong!</h2>
+            {winner && (
+              <p className="text-sm text-yellow-300">{game.winner === myPlayerId ? '🎉 You won!' : `${winner.nickname} wins!`}</p>
+            )}
+          </div>
+        </div>
+        <div className="w-full space-y-1">
           {playerIds.map(pid => {
             const p = game.players[pid]
+            const sortedHand = [...(p.hand ?? [])].sort(tileSort)
+            const exposedTiles = (p.exposedSets ?? []).flatMap(s => s.tiles)
             return (
-              <div key={pid} className={`rounded-lg p-2 ${pid === game.winner ? 'bg-yellow-900/40 ring-2 ring-yellow-400' : 'bg-black/20'}`}>
-                <p className="font-bold mb-1 text-sm">{p.nickname}{pid === game.winner ? ' 👑' : ''}</p>
+              <div key={pid} className={`rounded-lg px-2 py-1 flex items-center gap-2 ${pid === game.winner ? 'bg-yellow-900/40 border border-yellow-400/60' : 'bg-black/20'}`}>
+                <p className="font-bold text-xs shrink-0 w-14 truncate">{p.nickname}{pid === game.winner ? ' 👑' : ''}</p>
                 <div className="flex flex-wrap gap-0.5">
-                  {(p.hand ?? []).map(t => <TileComponent key={t.id} tile={t} small />)}
-                  {(p.exposedSets ?? []).flatMap((s, si) => s.tiles.map((t, ti) => (
-                    <TileComponent key={`${si}-${ti}`} tile={t} small />
-                  )))}
+                  {sortedHand.map(t => <TileComponent key={t.id} tile={t} small />)}
+                  {exposedTiles.map((t, i) => <TileComponent key={`e-${i}`} tile={t} small />)}
                 </div>
               </div>
             )
           })}
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 mt-auto">
           <button onClick={() => resetGame(gameId)} className="bg-yellow-400 text-black font-bold py-2 px-6 rounded-lg hover:bg-yellow-300 active:scale-95">Play Again</button>
           <button onClick={onLeave} className="bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-500 active:scale-95">Exit</button>
         </div>
@@ -333,7 +344,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           {/* Status bar: wall count far left, turn/claim status to the right */}
           <div className="flex items-center gap-2 px-1 mt-auto shrink-0">
             <p className="text-[9px] text-slate-600 shrink-0 whitespace-nowrap leading-none">{wallLeft} in wall · {VERSION}</p>
-            <p className={`text-[10px] font-bold ${getStatusColor()} flex-1 text-center leading-none`}>{getStatusText()}</p>
+            <p className={`text-xs font-bold ${getStatusColor()} flex-1 text-center leading-none`}>{getStatusText()}</p>
           </div>
         </div>
 
@@ -359,7 +370,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           {/* Mahjong + Discards stacked at bottom */}
           <div className="mt-auto w-full flex flex-col gap-1">
             {showMahjongBtn && (
-              <button onClick={handleMahjong} className={BTN_MAHJONG}>Mahjong!</button>
+              <button onClick={handleMahjong} className={BTN_MAHJONG}>Mahjong</button>
             )}
             <button
               onClick={() => setShowDiscards(true)}
