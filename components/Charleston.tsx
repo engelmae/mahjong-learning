@@ -112,18 +112,15 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   return (
     <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-2">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <button onClick={sortHand} className="text-xs text-emerald-400 border border-emerald-600 rounded px-2 py-1 shrink-0 font-medium">
-          Sort
-        </button>
-        <div className="flex-1 text-center">
-          <h2 className="text-lg font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
-          <p className="text-emerald-300 text-sm">{currentPass.label}</p>
-          <p className="text-xs text-emerald-400">{playersReady}/{totalPlayers} players ready</p>
+      <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1.5 shrink-0" style={{ minWidth: 62 }}>
+          <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center">Sort</button>
+          <button onClick={onLeave} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center">Exit</button>
         </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <button onClick={onLeave} className="text-xs text-emerald-500 hover:text-red-400 px-1">Leave</button>
-          <span className="text-xs text-emerald-800">{VERSION}</span>
+        <div className="flex-1 text-center">
+          <h2 className="text-base font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
+          <p className="text-emerald-300 text-sm">{currentPass.label}</p>
+          <p className="text-xs text-emerald-500">{playersReady}/{totalPlayers} ready · <span className="text-slate-700">{VERSION}</span></p>
         </div>
       </div>
 

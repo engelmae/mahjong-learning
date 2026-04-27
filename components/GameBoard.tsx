@@ -41,6 +41,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const [claimMode, setClaimMode] = useState(false)
   const [claimSelection, setClaimSelection] = useState<string[]>([])
   const prevHandRef = useRef<string[]>([])
+  const claimModeRef = useRef(false)
+  claimModeRef.current = claimMode
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
@@ -76,6 +78,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     if (isMyDiscard) return
     setShowClaim(true)
     const tick = () => {
+      if (claimModeRef.current) return  // freeze display while player selects tiles
       const r = Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000))
       setClaimCountdown(r)
       if (r <= 0) setShowClaim(false)
@@ -146,10 +149,14 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   }
 
   async function handleMahjong() {
-    if (pending) {
-      await claimDiscard(gameId, myPlayerId, 'mahjong', [], pending.tile)
-    } else {
-      await declareMahjong(gameId, myPlayerId)
+    try {
+      if (pending) {
+        await claimDiscard(gameId, myPlayerId, 'mahjong', [], pending.tile)
+      } else {
+        await declareMahjong(gameId, myPlayerId)
+      }
+    } catch (e) {
+      console.error('Mahjong error:', e)
     }
   }
 
@@ -264,7 +271,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               <div key={pid} className={`rounded px-1 py-0.5 shrink-0 ${isOppTurn ? 'bg-yellow-600/20 ring-1 ring-yellow-500/60' : 'bg-black/20'}`}>
                 <div className="flex items-center gap-1">
                   <span className="text-xs font-semibold shrink-0 w-14 truncate">{opp.nickname}</span>
-                  {isOppTurn && <span className="text-[9px] bg-yellow-400 text-black px-0.5 rounded shrink-0">▶</span>}
                   <div className="flex gap-0.5 overflow-hidden flex-1 min-w-0">
                     {Array.from({ length: Math.min(opp.hand?.length ?? 0, 20) }).map((_, i) => (
                       <TileComponent key={i} tile={{ id: `fd-${pid}-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
@@ -312,6 +318,9 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
           {/* Action panel */}
           <div className="flex flex-col gap-1 w-full">
+            {isMyTurn && !showClaim && (
+              <p className="text-emerald-400 text-[10px] font-bold text-center tracking-wide">YOUR TURN</p>
+            )}
             {renderActionPanel()}
           </div>
 
@@ -328,8 +337,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         </div>
       </div>
 
-      {/* My area */}
-      <div className="shrink-0 flex items-center gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t border-slate-700/50 bg-black/20">
+      {/* My area — glows emerald when it's my turn */}
+      <div className={`shrink-0 flex items-center gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t-2 bg-black/20 transition-colors ${isMyTurn ? 'border-emerald-400 shadow-[0_-3px_12px_rgba(52,211,153,0.25)]' : 'border-slate-700/50'}`}>
 
         {/* Exposed sets — each set in its own amber box with type label */}
         {(me?.exposedSets?.length ?? 0) > 0 && (
@@ -381,14 +390,14 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         </div>
 
         {/* Sort + Exit */}
-        <div className="flex flex-col gap-1 shrink-0 items-stretch pl-1" style={{ minWidth: 52 }}>
+        <div className="flex flex-col gap-1.5 shrink-0 items-stretch pl-1.5" style={{ minWidth: 62 }}>
           <button
             onClick={sortHand}
-            className="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg px-2 py-2 active:scale-95 transition-all text-center"
+            className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center"
           >Sort</button>
           <button
             onClick={onLeave}
-            className="bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg px-2 py-2 active:scale-95 transition-all text-center"
+            className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center"
           >Exit</button>
         </div>
       </div>
