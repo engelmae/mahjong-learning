@@ -198,11 +198,21 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     await swapJoker(gameId, ownerId, setIndex, jokerIndex, myPlayerId, replacementTile, jokerTile)
   }
 
+  function tileName(tile: Tile): string {
+    if (tile.isJoker) return 'a Joker'
+    if (tile.suit === 'flower') return 'a Flower'
+    if (tile.suit === 'wind') return `${tile.value} Wind`
+    if (tile.suit === 'dragon') return String(tile.value)  // "Soap", "Red", "Green"
+    const s = tile.suit.charAt(0).toUpperCase() + tile.suit.slice(1)
+    return `a ${tile.value} ${s}`  // "a 9 Crak", "a 3 Bam"
+  }
+
   // Status text and color for the bar below opponents
   function getStatusText(): string {
     if (showClaim && canClaim) {
       if (claimMode) return 'Tap tiles to expose'
-      return `${claimCountdown}s left to claim`
+      const thrower = game.players[pending!.fromPlayerId]?.nickname ?? '…'
+      return `${thrower} threw ${tileName(pending!.tile)}…`
     }
     if (isMyTurn && !drewThisTurn) return 'Your turn to draw…'
     if (isMyTurn && drewThisTurn && !selectedTile) return 'Select your discard…'
@@ -274,7 +284,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         return (
           <>
             <button onClick={handleExpose} disabled={!canExpose}
-              className={canExpose ? BTN_CALL : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
+              className={canExpose ? BTN_CALL + ' btn-pulse-amber' : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
               Expose ({claimSelection.length})
             </button>
             <button onClick={() => { setClaimMode(false); setClaimSelection([]) }} className={BTN_OUTLINE}>Cancel</button>
@@ -282,16 +292,16 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         )
       }
       return (
-        <button onClick={() => setClaimMode(true)} className={BTN_CALL}>Call</button>
+        <button onClick={() => setClaimMode(true)} className={BTN_CALL + ' btn-pulse-amber'}>Call</button>
       )
     }
     if (isMyTurn && !drewThisTurn) {
-      return <button onClick={handleDraw} className={BTN_DRAW}>Draw</button>
+      return <button onClick={handleDraw} className={BTN_DRAW + ' btn-pulse-green'}>Draw</button>
     }
     if (isMyTurn && drewThisTurn) {
       return (
         <button onClick={handleDiscard} disabled={!selectedTile}
-          className={selectedTile ? BTN_DISCARD : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
+          className={selectedTile ? BTN_DISCARD + ' btn-pulse-blue' : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
           Discard
         </button>
       )
@@ -363,11 +373,19 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
         {/* Right: last discard + action buttons + discards */}
         <div className="shrink-0 w-[108px] flex flex-col gap-1.5 items-center">
-          {/* Last discarded tile */}
+          {/* Last discarded tile + claim progress bar */}
           {lastDiscardTile ? (
-            <div className={`flex flex-col items-center gap-0.5 ${canClaim ? 'ring-2 ring-amber-400 rounded-lg p-0.5' : ''}`}>
+            <div className={`flex flex-col items-center gap-0.5 w-full ${canClaim ? 'ring-2 ring-amber-400 rounded-lg p-0.5' : ''}`}>
               <TileComponent tile={lastDiscardTile} />
               {lastDiscardBy && <span className="text-[9px] text-slate-400 text-center">{lastDiscardBy}</span>}
+              {showClaim && canClaim && (
+                <div className="w-full h-[3px] bg-slate-700/60 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-500 rounded-full"
+                    style={{ width: `${Math.max(0, Math.round((claimCountdown / 8) * 100))}%`, transition: 'width 0.5s linear' }}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="w-[52px] h-[70px] rounded-lg border border-slate-700 flex items-center justify-center">
@@ -460,6 +478,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                   selected={!drag.dragging && !claimMode && isMyTurn && drewThisTurn && selectedTile?.id === tile.id}
                   onClick={() => handleTileClick(tile)}
                 />
+                {isDrawn && !drag.dragging && (
+                  <div style={{ position: 'absolute', inset: 0, borderRadius: 8, overflow: 'hidden', pointerEvents: 'none', zIndex: 10 }}>
+                    <div className="tile-shimmer-streak" />
+                  </div>
+                )}
               </div>
             )
           })}

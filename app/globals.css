@@ -26,6 +26,46 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ── Button glow pulses ──────────────────────────────────────────────── */
+@keyframes glow-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+  50%       { box-shadow: 0 0 10px 3px rgba(52,211,153,0.45); }
+}
+@keyframes glow-blue {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(90,171,255,0); }
+  50%       { box-shadow: 0 0 10px 3px rgba(90,171,255,0.45); }
+}
+@keyframes glow-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+  50%       { box-shadow: 0 0 10px 3px rgba(245,158,11,0.45); }
+}
+.btn-pulse-green { animation: glow-green 2s ease-in-out infinite; }
+.btn-pulse-blue  { animation: glow-blue  2s ease-in-out infinite; }
+.btn-pulse-amber { animation: glow-amber 2s ease-in-out infinite; }
+
+/* ── One-shot tile shimmer ───────────────────────────────────────────── */
+@keyframes shimmer-sweep {
+  0%   { transform: translateX(-150%) skewX(-20deg); }
+  100% { transform: translateX(300%)  skewX(-20deg); }
+}
+.tile-shimmer-streak {
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 50%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.42), transparent);
+  animation: shimmer-sweep 0.65s ease-out forwards;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── Charleston received-tile pop ────────────────────────────────────── */
+@keyframes tile-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.14); }
+  100% { transform: scale(1); }
+}
+.tile-pop { animation: tile-pop 0.35s ease-out; }
+
 /* Prevent iOS text-selection loupe during tile long-press drag */
 [data-drag-id] {
   -webkit-user-select: none;
