@@ -331,12 +331,17 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
       {/* My area */}
       <div className="shrink-0 flex items-center gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t border-slate-700/50 bg-black/20">
 
-        {/* Exposed sets inline */}
+        {/* Exposed sets — each set in its own amber box with type label */}
         {(me?.exposedSets?.length ?? 0) > 0 && (
-          <div className="flex gap-0.5 shrink-0 pr-1 border-r border-slate-600 overflow-x-auto max-w-[30%]">
-            {(me?.exposedSets ?? []).flatMap((s, si) =>
-              s.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} small />)
-            )}
+          <div className="flex gap-1 shrink-0 pr-1.5 border-r-2 border-slate-500 overflow-x-auto max-w-[35%] items-center">
+            {(me?.exposedSets ?? []).map((set, si) => (
+              <div key={si} className="relative flex gap-0.5 bg-amber-900/60 border border-amber-500/70 rounded-md px-0.5 pt-3 pb-0.5 shrink-0">
+                <span className="absolute top-0.5 left-0 right-0 text-center text-[7px] text-amber-300 font-bold leading-none tracking-wide">
+                  {set.claimType.toUpperCase()}
+                </span>
+                {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} small />)}
+              </div>
+            ))}
           </div>
         )}
 
