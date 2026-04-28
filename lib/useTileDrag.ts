@@ -59,7 +59,10 @@ export function useTileDrag(
 
   function onTileDown(e: React.PointerEvent, tileId: string) {
     clearLongPress()
-    dragRef.current = { id: tileId, insertBefore: null, started: false, startX: e.clientX, startY: e.clientY }
+    // Initialize insertBefore to current position so cancel/immediate-release stays in place
+    const currentIdx = orderedIds.indexOf(tileId)
+    const currentInsertBefore = currentIdx < orderedIds.length - 1 ? orderedIds[currentIdx + 1] : null
+    dragRef.current = { id: tileId, insertBefore: currentInsertBefore, started: false, startX: e.clientX, startY: e.clientY }
 
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null
@@ -133,7 +136,19 @@ export function useTileDrag(
 
   function onCancel() {
     clearLongPress()
+    if (!dragRef.current) return
+    const { id, insertBefore: ib, started } = dragRef.current
     dragRef.current = null
+    // Commit current position rather than reverting — prevents accidental "snap back"
+    if (started) {
+      setOrderedIds(prev => {
+        const without = prev.filter(x => x !== id)
+        if (ib === null) return [...without, id]
+        const idx = without.indexOf(ib)
+        if (idx === -1) return [...without, id]
+        return [...without.slice(0, idx), id, ...without.slice(idx)]
+      })
+    }
     setDragId(null)
     setInsertBefore(undefined)
     suppressClick.current = false

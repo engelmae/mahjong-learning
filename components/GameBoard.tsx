@@ -271,7 +271,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           <>
             <button onClick={handleExpose} disabled={!canExpose}
               className={canExpose ? BTN_CALL + ' btn-pulse-amber' : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
-              Expose ({claimSelection.length})
+              Expose ({claimSelection.length + 1})
             </button>
             <button onClick={() => { setClaimMode(false); setClaimSelection([]) }} className={BTN_OUTLINE}>Cancel</button>
           </>
@@ -370,7 +370,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                   <div
                     key={pending.tile.id}
                     className="h-full bg-amber-500 rounded-full"
-                    style={{ animation: `claim-bar-shrink ${Math.max(0, (pending.expiresAt - Date.now()) / 1000).toFixed(2)}s linear forwards` }}
+                    style={{ animation: `claim-bar-shrink ${Math.max(0, (pending.expiresAt - Date.now()) / 1000).toFixed(2)}s linear forwards`, animationPlayState: claimMode ? 'paused' : 'running' }}
                   />
                 </div>
               )}
@@ -404,7 +404,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
         <div
           ref={drag.containerRef}
-          className={`flex flex-wrap gap-0.5 flex-1 min-w-0 pt-3 pb-2 ${drag.dragging ? 'overflow-visible' : ''}`}
+          className={`flex flex-wrap items-end gap-0.5 flex-1 min-w-0 pt-3 pb-2 ${drag.dragging ? 'overflow-visible' : ''}`}
           style={{ touchAction: drag.dragging ? 'none' : 'pan-x' }}
           onPointerMove={drag.onMove}
           onPointerUp={drag.onUp}

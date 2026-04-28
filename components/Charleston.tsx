@@ -138,7 +138,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
         <div className="flex justify-center">
           <div
             ref={drag.containerRef}
-            className="flex flex-wrap gap-1 justify-center pt-3 pb-1"
+            className={`flex flex-wrap gap-1 justify-center pt-3 pb-1 transition-opacity duration-500 ${alreadySubmitted ? 'opacity-40' : 'opacity-100'}`}
             style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
             onPointerMove={drag.onMove}
             onPointerUp={drag.onUp}
