@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { GameState, Tile } from '@/types/game'
 import TileComponent from './Tile'
 import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, swapJoker, resetGame } from '@/lib/gameActions'
@@ -51,6 +51,15 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const pending = game.pendingClaim
   const isMyDiscard = pending?.fromPlayerId === myPlayerId
   const canClaim = !!pending && !isMyDiscard && game.status === 'playing'
+
+  // Locked in once per discard tile — only recomputes when pending.tile.id changes,
+  // so re-renders from claimMode/selection changes never produce a new duration string
+  // that would restart the CSS animation.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const claimBarDuration = useMemo(
+    () => pending ? Math.max(0.1, (pending.expiresAt - Date.now()) / 1000) : 0,
+    [pending?.tile?.id]
+  )
 
   const drag = useTileDrag(myAreaOrder, setMyAreaOrder)
 
@@ -367,10 +376,19 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               {lastDiscardBy && <span className="text-[9px] text-slate-400 text-center">{lastDiscardBy}</span>}
               {pending && (canClaim || isMyDiscard) && (
                 <div className="w-full h-[3px] bg-slate-700/60 rounded-full overflow-hidden">
+                  {/* Use separate animation sub-properties so only animationPlayState
+                      changes between renders — the shorthand would restart the animation
+                      each time Date.now() produces a different duration string. */}
                   <div
                     key={pending.tile.id}
                     className="h-full bg-amber-500 rounded-full"
-                    style={{ animation: `claim-bar-shrink ${Math.max(0, (pending.expiresAt - Date.now()) / 1000).toFixed(2)}s linear forwards`, animationPlayState: claimMode ? 'paused' : 'running' }}
+                    style={{
+                      animationName: 'claim-bar-shrink',
+                      animationDuration: `${claimBarDuration}s`,
+                      animationTimingFunction: 'linear',
+                      animationFillMode: 'forwards',
+                      animationPlayState: claimMode ? 'paused' : 'running',
+                    }}
                   />
                 </div>
               )}
