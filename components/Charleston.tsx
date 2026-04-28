@@ -40,6 +40,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   const [handOrder, setHandOrder] = useState<string[]>([])
   const [receivedTileIds, setReceivedTileIds] = useState<Set<string>>(new Set())
   const prevHandRef = useRef<string[]>([])
+  const prevRoundRef = useRef(-1)
 
   const me = game.players[myPlayerId]
   const alreadySubmitted = me?.charlestionReady
@@ -51,30 +52,33 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
 
   const drag = useTileDrag(handOrder, setHandOrder)
 
-  // Sync hand order and detect received tiles (batch of 3 appear after a pass)
+  // Combined effect: sync hand order + detect received tiles on round advance.
+  // Both deps fire simultaneously when a pass is processed; handling them in one
+  // effect prevents the round-clear from overwriting the just-detected new tiles.
   useEffect(() => {
     const currentIds = hand.map(t => t.id)
     const currentIdSet = new Set(currentIds)
     const prev = prevHandRef.current
+    const roundChanged = prevRoundRef.current !== roundIndex
+
     setHandOrder(prevOrder => {
       const retained = prevOrder.filter(id => currentIdSet.has(id))
       const newIds = currentIds.filter(id => !new Set(retained).has(id))
       return [...retained, ...newIds]
     })
-    // Mark newly received tiles (3 arrive at once after a round completes)
-    if (currentIds.length >= prev.length && prev.length > 0) {
-      const prevSet = new Set(prev)
-      const newIds = currentIds.filter(id => !prevSet.has(id))
-      if (newIds.length > 0) setReceivedTileIds(new Set(newIds))
-    }
-    prevHandRef.current = currentIds
-  }, [hand.map(t => t.id).join(',')])
 
-  // Clear selection and received highlights when round advances
-  useEffect(() => {
-    setSelected(new Set())
-    setReceivedTileIds(new Set())
-  }, [roundIndex])
+    if (roundChanged) {
+      prevRoundRef.current = roundIndex
+      setSelected(new Set())
+      if (prev.length > 0) {
+        const prevSet = new Set(prev)
+        const newIds = currentIds.filter(id => !prevSet.has(id))
+        setReceivedTileIds(new Set(newIds))
+      }
+    }
+
+    prevHandRef.current = currentIds
+  }, [hand.map(t => t.id).join(','), roundIndex])
 
   function sortHand() {
     setHandOrder([...hand].sort(tileSort).map(t => t.id))

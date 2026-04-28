@@ -199,6 +199,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
       const thrower = game.players[pending!.fromPlayerId]?.nickname ?? '…'
       return `${thrower} threw ${tileName(pending!.tile)}…`
     }
+    if (pending && isMyDiscard) return `You threw ${tileName(pending.tile)}…`
     if (isMyTurn && !drewThisTurn) return 'Your turn to draw…'
     if (isMyTurn && drewThisTurn && !selectedTile) return 'Select your discard…'
     if (isMyTurn && drewThisTurn && selectedTile) return 'Confirm your discard…'
@@ -211,6 +212,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
   function getStatusColor(): string {
     if (showClaim && canClaim) return claimMode ? 'text-emerald-400' : 'text-amber-400'
+    if (pending && isMyDiscard) return 'text-amber-400'
     if (isMyTurn) return 'text-emerald-400'
     return 'text-slate-400'
   }
@@ -219,17 +221,21 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   if (game.status === 'finished') {
     const winner = game.winner ? game.players[game.winner] : null
     return (
-      <div className="flex flex-col h-full bg-[#152030] text-white gap-2 p-3 overflow-y-auto" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-col h-full bg-[#152030] text-white gap-2 p-3 overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-3xl">🀄</span>
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold leading-tight">Mahjong!</h2>
             {winner && (
               <p className="text-sm text-yellow-300">{game.winner === myPlayerId ? '🎉 You won!' : `${winner.nickname} wins!`}</p>
             )}
           </div>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={() => resetGame(gameId)} className="bg-yellow-400 text-black font-bold py-1.5 px-3 rounded-lg hover:bg-yellow-300 active:scale-95 text-sm">Play Again</button>
+            <button onClick={onLeave} className="bg-slate-600 text-white font-bold py-1.5 px-3 rounded-lg hover:bg-slate-500 active:scale-95 text-sm">Exit</button>
+          </div>
         </div>
-        <div className="w-full space-y-1">
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
           {playerIds.map(pid => {
             const p = game.players[pid]
             const sortedHand = [...(p.hand ?? [])].sort(tileSort)
@@ -237,17 +243,13 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             return (
               <div key={pid} className={`rounded-lg px-2 py-1 flex items-center gap-2 ${pid === game.winner ? 'bg-yellow-900/40 border border-yellow-400/60' : 'bg-black/20'}`}>
                 <p className="font-bold text-xs shrink-0 w-14 truncate">{p.nickname}{pid === game.winner ? ' 👑' : ''}</p>
-                <div className="flex flex-wrap gap-0.5">
+                <div className="flex gap-0.5 overflow-x-auto">
                   {sortedHand.map(t => <TileComponent key={t.id} tile={t} small />)}
                   {exposedTiles.map((t, i) => <TileComponent key={`e-${i}`} tile={t} small />)}
                 </div>
               </div>
             )
           })}
-        </div>
-        <div className="flex gap-3 mt-auto">
-          <button onClick={() => resetGame(gameId)} className="bg-yellow-400 text-black font-bold py-2 px-6 rounded-lg hover:bg-yellow-300 active:scale-95">Play Again</button>
-          <button onClick={onLeave} className="bg-slate-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-500 active:scale-95">Exit</button>
         </div>
       </div>
     )
@@ -363,13 +365,12 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                 <TileComponent tile={lastDiscardTile} />
               </div>
               {lastDiscardBy && <span className="text-[9px] text-slate-400 text-center">{lastDiscardBy}</span>}
-              {showClaim && canClaim && (
+              {pending && (canClaim || isMyDiscard) && (
                 <div className="w-full h-[3px] bg-slate-700/60 rounded-full overflow-hidden">
-                  {/* CSS animation for perfectly smooth shrink — key restarts it on each new discard */}
                   <div
-                    key={pending?.tile?.id}
+                    key={pending.tile.id}
                     className="h-full bg-amber-500 rounded-full"
-                    style={{ animation: `claim-bar-shrink ${Math.max(0, (pending!.expiresAt - Date.now()) / 1000).toFixed(2)}s linear forwards` }}
+                    style={{ animation: `claim-bar-shrink ${Math.max(0, (pending.expiresAt - Date.now()) / 1000).toFixed(2)}s linear forwards` }}
                   />
                 </div>
               )}
@@ -403,7 +404,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
         <div
           ref={drag.containerRef}
-          className={`flex gap-0.5 flex-1 min-w-0 pt-3 pb-2 ${drag.dragging ? 'overflow-visible' : 'overflow-x-auto'}`}
+          className={`flex flex-wrap gap-0.5 flex-1 min-w-0 pt-3 pb-2 ${drag.dragging ? 'overflow-visible' : ''}`}
           style={{ touchAction: drag.dragging ? 'none' : 'pan-x' }}
           onPointerMove={drag.onMove}
           onPointerUp={drag.onUp}
