@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { GameState, Tile } from '@/types/game'
 import TileComponent from './Tile'
 import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, swapJoker, resetGame } from '@/lib/gameActions'
@@ -18,11 +18,10 @@ function tileSort(a: Tile, b: Tile): number {
   return (av as number) - (bv as number)
 }
 
-// Button colors keyed to their matching tile highlight colors
-const BTN_DRAW    = 'bg-emerald-400 hover:bg-emerald-300 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'   // matches drawn tile #34d399
-const BTN_DISCARD = 'bg-[#5aabff] hover:bg-[#7bbeff] text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'      // matches selected tile #5aabff
-const BTN_CALL    = 'bg-amber-500 hover:bg-amber-400 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'       // matches exposed set amber / claim selection #f59e0b
-const BTN_MAHJONG = 'bg-violet-500 hover:bg-violet-400 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'    // distinct
+const BTN_DRAW    = 'bg-emerald-400 hover:bg-emerald-300 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
+const BTN_DISCARD = 'bg-[#5aabff] hover:bg-[#7bbeff] text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
+const BTN_CALL    = 'bg-amber-500 hover:bg-amber-400 text-black font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
+const BTN_MAHJONG = 'bg-violet-500 hover:bg-violet-400 text-white font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
 const BTN_MUTED   = 'bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
 const BTN_OUTLINE = 'border border-slate-500 text-slate-300 hover:bg-slate-700 font-semibold py-2 rounded-lg text-sm w-full active:scale-95 transition-all'
 
@@ -37,9 +36,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const [selectedTile, setSelectedTile] = useState<Tile | null>(null)
   const [drewThisTurn, setDrewThisTurn] = useState(false)
   const [drawnTileId, setDrawnTileId] = useState<string | null>(null)
-  const [handOrder, setHandOrder] = useState<string[]>([])
+  const [myAreaOrder, setMyAreaOrder] = useState<string[]>([])
   const [showDiscards, setShowDiscards] = useState(false)
-  const [claimCountdown, setClaimCountdown] = useState(0)
   const [showClaim, setShowClaim] = useState(false)
   const [claimMode, setClaimMode] = useState(false)
   const [claimSelection, setClaimSelection] = useState<string[]>([])
@@ -47,8 +45,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const claimModeRef = useRef(false)
   claimModeRef.current = claimMode
   const justClaimedRef = useRef(false)
-  const [exposedSetOrder, setExposedSetOrder] = useState<string[]>([])
-  const setDrag = useTileDrag(exposedSetOrder, setExposedSetOrder)
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
@@ -56,18 +52,24 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const isMyDiscard = pending?.fromPlayerId === myPlayerId
   const canClaim = !!pending && !isMyDiscard && game.status === 'playing'
 
-  const drag = useTileDrag(handOrder, setHandOrder)
+  const drag = useTileDrag(myAreaOrder, setMyAreaOrder)
 
+  // Sync myAreaOrder: hand tiles + exposed set slots as a unified list
   useEffect(() => {
-    const currentIds = (me?.hand ?? []).map(t => t.id)
-    const currentIdSet = new Set(currentIds)
-    setHandOrder(prev => {
-      const retained = prev.filter(id => currentIdSet.has(id))
-      const newIds = currentIds.filter(id => !new Set(retained).has(id))
-      return [...retained, ...newIds]
+    const tileIds = (me?.hand ?? []).map(t => t.id)
+    const count = me?.exposedSets?.length ?? 0
+    const sIds = Array.from({ length: count }, (_, i) => `eset-${i}`)
+    const allValid = new Set([...tileIds, ...sIds])
+    setMyAreaOrder(prev => {
+      const retained = prev.filter(id => allValid.has(id))
+      const retainedSet = new Set(retained)
+      const newSIds = sIds.filter(id => !retainedSet.has(id))
+      const newTIds = tileIds.filter(id => !retainedSet.has(id))
+      return [...retained, ...newSIds, ...newTIds]
     })
-  }, [(me?.hand ?? []).map(t => t.id).join(',')])
+  }, [(me?.hand ?? []).map(t => t.id).join(','), me?.exposedSets?.length])
 
+  // Detect drawn tile (hand grows by 1)
   useEffect(() => {
     const currentIds = (me?.hand ?? []).map(t => t.id)
     const prev = prevHandRef.current
@@ -79,23 +81,21 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     prevHandRef.current = currentIds
   }, [(me?.hand ?? []).map(t => t.id).join(',')])
 
-  // Countdown display + auto-advance passClaim (frozen when player is selecting tiles to expose)
+  // Claim countdown + auto-advance passClaim
   useEffect(() => {
     if (!pending) { setShowClaim(false); return }
 
     if (isMyDiscard) {
-      // Own discard: no UI needed, but still auto-advance after window closes
       const remaining = Math.max(0, pending.expiresAt - Date.now())
       const t = setTimeout(() => passClaim(gameId), remaining + 300)
       return () => clearTimeout(t)
     }
 
     setShowClaim(true)
+    const expiresAt = pending.expiresAt
     const tick = () => {
-      if (claimModeRef.current) return  // player pressed Call — freeze display, skip auto-advance
-      const r = Math.max(0, Math.ceil((pending.expiresAt - Date.now()) / 1000))
-      setClaimCountdown(r)
-      if (r <= 0) {
+      if (claimModeRef.current) return
+      if (Date.now() >= expiresAt) {
         setShowClaim(false)
         passClaim(gameId)
       }
@@ -105,26 +105,14 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     return () => clearInterval(interval)
   }, [pending?.tile?.id, isMyDiscard])
 
-  // Auto-cancel claim mode when window closes
   useEffect(() => {
     if (!showClaim) { setClaimMode(false); setClaimSelection([]) }
   }, [showClaim])
 
-  // Keep exposedSetOrder in sync when new sets are added
-  useEffect(() => {
-    const count = me?.exposedSets?.length ?? 0
-    const validIds = Array.from({ length: count }, (_, i) => `eset-${i}`)
-    setExposedSetOrder(prev => {
-      const retained = prev.filter(id => validIds.includes(id))
-      const newIds = validIds.filter(id => !retained.includes(id))
-      return [...retained, ...newIds]
-    })
-  }, [me?.exposedSets?.length])
-
   useEffect(() => {
     if (justClaimedRef.current) {
       justClaimedRef.current = false
-      setDrewThisTurn(true)   // stay in discard mode after claiming
+      setDrewThisTurn(true)
     } else {
       setDrewThisTurn(false)
     }
@@ -137,13 +125,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   )
   const opponents = playerIds.filter(id => id !== myPlayerId)
 
-  const displayHand = useMemo(
-    () => drag.displayIds.map(id => (me?.hand ?? []).find(t => t.id === id)).filter(Boolean) as Tile[],
-    [drag.displayIds, me?.hand]
-  )
-
   function sortHand() {
-    setHandOrder([...(me?.hand ?? [])].sort(tileSort).map(t => t.id))
+    const count = me?.exposedSets?.length ?? 0
+    const sIds = Array.from({ length: count }, (_, i) => `eset-${i}`)
+    const sortedTileIds = [...(me?.hand ?? [])].sort(tileSort).map(t => t.id)
+    setMyAreaOrder([...sIds, ...sortedTileIds])
   }
 
   function handleTileClick(tile: Tile) {
@@ -175,7 +161,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     if (!pending || claimSelection.length < 2) return
     const type = claimSelection.length >= 3 ? 'kong' : 'pung'
     const tiles = (me?.hand ?? []).filter(t => claimSelection.includes(t.id))
-    justClaimedRef.current = true   // signal: when currentTurn fires, stay in discard mode
+    justClaimedRef.current = true
     await claimDiscard(gameId, myPlayerId, type, tiles, pending.tile)
     setClaimMode(false)
     setClaimSelection([])
@@ -202,12 +188,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     if (tile.isJoker) return 'a Joker'
     if (tile.suit === 'flower') return 'a Flower'
     if (tile.suit === 'wind') return `${tile.value} Wind`
-    if (tile.suit === 'dragon') return String(tile.value)  // "Soap", "Red", "Green"
+    if (tile.suit === 'dragon') return String(tile.value)
     const s = tile.suit.charAt(0).toUpperCase() + tile.suit.slice(1)
-    return `a ${tile.value} ${s}`  // "a 9 Crak", "a 3 Bam"
+    return `a ${tile.value} ${s}`
   }
 
-  // Status text and color for the bar below opponents
   function getStatusText(): string {
     if (showClaim && canClaim) {
       if (claimMode) return 'Tap tiles to expose'
@@ -268,7 +253,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     )
   }
 
-  // ── Info panel ─────────────────────────────────────────────────────────────
+  // ── Info panel helpers ─────────────────────────────────────────────────────
   const lastDiscardTile = pending?.tile ?? game.lastDiscard?.tile ?? null
   const lastDiscardBy = pending
     ? game.players[pending.fromPlayerId]?.nickname
@@ -276,7 +261,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
   const wallLeft = Math.max(0, (game.wall?.length ?? 0) - game.wallIndex)
 
-  // Only claim/draw/discard action buttons — status text lives in the opponents status bar
   function renderActionPanel() {
     if (showClaim && canClaim) {
       if (claimMode) {
@@ -309,7 +293,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     return null
   }
 
-  // Mahjong button shows in bottom strip (left of Sort/Exit) when relevant
   const showMahjongBtn = (isMyTurn && drewThisTurn) || (showClaim && canClaim && !claimMode)
 
   // ── Main layout ────────────────────────────────────────────────────────────
@@ -364,25 +347,29 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             )
           })}
 
-          {/* Status bar: wall count far left, turn/claim status to the right */}
+          {/* Status bar */}
           <div className="flex items-center gap-2 px-1 mt-auto shrink-0">
             <p className="text-[9px] text-slate-600 shrink-0 whitespace-nowrap leading-none">{wallLeft} in wall · {VERSION}</p>
             <p className={`text-xs font-bold ${getStatusColor()} flex-1 text-center leading-none`}>{getStatusText()}</p>
           </div>
         </div>
 
-        {/* Right: last discard + action buttons + discards */}
+        {/* Right: last discard + action buttons */}
         <div className="shrink-0 w-[108px] flex flex-col gap-1.5 items-center">
-          {/* Last discarded tile + claim progress bar */}
           {lastDiscardTile ? (
-            <div className={`flex flex-col items-center gap-0.5 w-full ${canClaim ? 'ring-2 ring-amber-400 rounded-lg p-0.5' : ''}`}>
-              <TileComponent tile={lastDiscardTile} />
+            <div className="flex flex-col items-center gap-0.5 w-full">
+              {/* Ring wraps only the tile, not the whole column */}
+              <div className={canClaim ? 'ring-2 ring-amber-400 rounded-lg p-0.5 inline-flex' : ''}>
+                <TileComponent tile={lastDiscardTile} />
+              </div>
               {lastDiscardBy && <span className="text-[9px] text-slate-400 text-center">{lastDiscardBy}</span>}
               {showClaim && canClaim && (
                 <div className="w-full h-[3px] bg-slate-700/60 rounded-full overflow-hidden">
+                  {/* CSS animation for perfectly smooth shrink — key restarts it on each new discard */}
                   <div
+                    key={pending?.tile?.id}
                     className="h-full bg-amber-500 rounded-full"
-                    style={{ width: `${Math.max(0, Math.round((claimCountdown / 8) * 100))}%`, transition: 'width 0.5s linear' }}
+                    style={{ animation: `claim-bar-shrink ${Math.max(0, (pending!.expiresAt - Date.now()) / 1000).toFixed(2)}s linear forwards` }}
                   />
                 </div>
               )}
@@ -393,12 +380,10 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             </div>
           )}
 
-          {/* Action panel — buttons only */}
           <div className="flex flex-col gap-1 w-full">
             {renderActionPanel()}
           </div>
 
-          {/* Mahjong + Discards stacked at bottom */}
           <div className="mt-auto w-full flex flex-col gap-1">
             {showMahjongBtn && (
               <button onClick={handleMahjong} className={BTN_MAHJONG}>Mahjong</button>
@@ -413,29 +398,29 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
         </div>
       </div>
 
-      {/* My area — glows emerald when it's my turn */}
+      {/* My area — unified hand + exposed sets in one draggable row */}
       <div className={`shrink-0 flex items-center gap-1 px-1 pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))] border-t-2 bg-black/20 transition-colors ${isMyTurn ? 'border-emerald-400 shadow-[0_-3px_12px_rgba(52,211,153,0.25)]' : 'border-slate-700/50'}`}>
 
-        {/* Exposed sets — draggable to reorder, long-press same as tiles */}
-        {(me?.exposedSets?.length ?? 0) > 0 && (
-          <div
-            ref={setDrag.containerRef}
-            className={`flex gap-1 shrink-0 pr-1.5 border-r-2 border-slate-500 max-w-[35%] items-center ${setDrag.dragging ? 'overflow-visible' : 'overflow-x-auto'}`}
-            style={{ touchAction: setDrag.dragging ? 'none' : 'pan-x' }}
-            onPointerMove={setDrag.onMove}
-            onPointerUp={setDrag.onUp}
-            onPointerCancel={setDrag.onCancel}
-          >
-            {setDrag.displayIds.map(eid => {
-              const si = parseInt(eid.replace('eset-', ''))
+        <div
+          ref={drag.containerRef}
+          className={`flex gap-0.5 flex-1 min-w-0 pt-3 pb-2 ${drag.dragging ? 'overflow-visible' : 'overflow-x-auto'}`}
+          style={{ touchAction: drag.dragging ? 'none' : 'pan-x' }}
+          onPointerMove={drag.onMove}
+          onPointerUp={drag.onUp}
+          onPointerCancel={drag.onCancel}
+        >
+          {drag.displayIds.map(id => {
+            // Exposed set block
+            if (id.startsWith('eset-')) {
+              const si = parseInt(id.replace('eset-', ''))
               const set = (me?.exposedSets ?? [])[si]
               if (!set) return null
               return (
                 <div
-                  key={eid}
-                  data-drag-id={eid}
-                  onPointerDown={e => setDrag.onTileDown(e, eid)}
-                  style={setDrag.tileStyle(eid)}
+                  key={id}
+                  data-drag-id={id}
+                  onPointerDown={e => drag.onTileDown(e, id)}
+                  style={drag.tileStyle(id)}
                   className="relative flex gap-0.5 bg-amber-900/60 border border-amber-500/70 rounded-md px-0.5 pt-3 pb-0.5 shrink-0"
                 >
                   <span className="absolute top-0.5 left-0 right-0 text-center text-[7px] text-amber-300 font-bold leading-none tracking-wide">
@@ -444,29 +429,20 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                   {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} small />)}
                 </div>
               )
-            })}
-          </div>
-        )}
+            }
 
-        {/* Hand */}
-        <div
-          ref={drag.containerRef}
-          className="flex gap-0.5 overflow-x-auto flex-1 min-w-0 pt-3 pb-2"
-          style={{ touchAction: drag.dragging ? 'none' : 'pan-x' }}
-          onPointerMove={drag.onMove}
-          onPointerUp={drag.onUp}
-          onPointerCancel={drag.onCancel}
-        >
-          {displayHand.map(tile => {
+            // Hand tile
+            const tile = (me?.hand ?? []).find(t => t.id === id)
+            if (!tile) return null
             const isDrawn = tile.id === drawnTileId && drewThisTurn
             const isClaimSel = claimMode && claimSelection.includes(tile.id)
             return (
               <div
-                key={tile.id}
-                data-drag-id={tile.id}
-                onPointerDown={e => drag.onTileDown(e, tile.id)}
+                key={id}
+                data-drag-id={id}
+                onPointerDown={e => drag.onTileDown(e, id)}
                 style={{
-                  ...drag.tileStyle(tile.id),
+                  ...drag.tileStyle(id),
                   outline: isClaimSel ? '2px solid #f59e0b' : (isDrawn && selectedTile?.id !== tile.id ? '2px solid #34d399' : undefined),
                   outlineOffset: '2px',
                   borderRadius: 8,

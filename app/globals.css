@@ -43,6 +43,12 @@ body {
 .btn-pulse-blue  { animation: glow-blue  2s ease-in-out infinite; }
 .btn-pulse-amber { animation: glow-amber 2s ease-in-out infinite; }
 
+/* ── Claim progress bar (CSS-driven, perfectly smooth) ──────────────── */
+@keyframes claim-bar-shrink {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
 /* ── One-shot tile shimmer ───────────────────────────────────────────── */
 @keyframes shimmer-sweep {
   0%   { transform: translateX(-150%) skewX(-20deg); }

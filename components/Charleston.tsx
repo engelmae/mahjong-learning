@@ -82,6 +82,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
 
   function handleTileClick(tile: Tile) {
     if (drag.consumeClick()) return
+    if (alreadySubmitted) return
     setSelected(prev => {
       const next = new Set(prev)
       if (next.has(tile.id)) {
@@ -118,77 +119,67 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
         <p className="text-xs text-emerald-500">{playersReady}/{totalPlayers} ready · <span className="text-slate-700">{VERSION}</span></p>
       </div>
 
-      {/* Body */}
-      {alreadySubmitted ? (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="text-4xl mb-2">✅</div>
-            <p className="text-emerald-300">Tiles passed! Waiting for others…</p>
-            <p className="text-xs text-emerald-500 mt-1">{playersReady}/{totalPlayers} ready</p>
+      {/* Status hint — changes text instead of swapping screen */}
+      <p className="text-sm text-emerald-300 text-center">
+        {alreadySubmitted
+          ? `Passed! Waiting for others… (${playersReady}/${totalPlayers})`
+          : drag.dragging ? 'Slide to position, release to drop' : 'Tap 3 tiles to pass — or long-press to rearrange'}
+      </p>
+
+      {/* Hand with Sort just above it — always visible */}
+      <div className="flex-1 flex flex-col justify-end">
+        <div className="flex justify-end mb-1 pr-1">
+          <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all">Sort</button>
+        </div>
+        <div className="flex justify-center">
+          <div
+            ref={drag.containerRef}
+            className="flex flex-wrap gap-1 justify-center pt-3 pb-1"
+            style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
+            onPointerMove={drag.onMove}
+            onPointerUp={drag.onUp}
+            onPointerCancel={drag.onCancel}
+          >
+            {displayHand.map(tile => {
+              const isReceived = receivedTileIds.has(tile.id) && !selected.has(tile.id)
+              return (
+                <div
+                  key={tile.id}
+                  data-drag-id={tile.id}
+                  onPointerDown={e => drag.onTileDown(e, tile.id)}
+                  style={drag.tileStyle(tile.id)}
+                >
+                  <div
+                    className={isReceived ? 'tile-pop' : undefined}
+                    style={{
+                      outline: isReceived ? '2px solid #34d399' : undefined,
+                      outlineOffset: '2px',
+                      borderRadius: 8,
+                      position: 'relative',
+                    }}
+                  >
+                    <TileComponent
+                      tile={tile}
+                      selected={!drag.dragging && !alreadySubmitted && selected.has(tile.id)}
+                      onClick={() => handleTileClick(tile)}
+                    />
+                    {isReceived && (
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: 8, overflow: 'hidden', pointerEvents: 'none', zIndex: 10 }}>
+                        <div className="tile-shimmer-streak" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
-      ) : (
-        <>
-          <p className="text-sm text-emerald-300 text-center">
-            {drag.dragging ? 'Slide to position, release to drop' : `Tap 3 tiles to pass — or long-press to rearrange`}
-          </p>
+      </div>
 
-          {/* Hand with Sort just above it */}
-          <div className="flex-1 flex flex-col justify-end">
-            <div className="flex justify-end mb-1 pr-1">
-              <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all">Sort</button>
-            </div>
-            <div className="flex justify-center">
-              <div
-                ref={drag.containerRef}
-                className="flex flex-wrap gap-1 justify-center pt-3 pb-1"
-                style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
-                onPointerMove={drag.onMove}
-                onPointerUp={drag.onUp}
-                onPointerCancel={drag.onCancel}
-              >
-                {displayHand.map(tile => {
-                  const isReceived = receivedTileIds.has(tile.id) && !selected.has(tile.id)
-                  return (
-                    <div
-                      key={tile.id}
-                      data-drag-id={tile.id}
-                      onPointerDown={e => drag.onTileDown(e, tile.id)}
-                      style={drag.tileStyle(tile.id)}
-                    >
-                      <div
-                        className={isReceived ? 'tile-pop' : undefined}
-                        style={{
-                          outline: isReceived ? '2px solid #34d399' : undefined,
-                          outlineOffset: '2px',
-                          borderRadius: 8,
-                          position: 'relative',
-                        }}
-                      >
-                        <TileComponent
-                          tile={tile}
-                          selected={!drag.dragging && selected.has(tile.id)}
-                          onClick={() => handleTileClick(tile)}
-                        />
-                        {isReceived && (
-                          <div style={{ position: 'absolute', inset: 0, borderRadius: 8, overflow: 'hidden', pointerEvents: 'none', zIndex: 10 }}>
-                            <div className="tile-shimmer-streak" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Footer: Pass button (when active) + Sort/Exit always bottom-right */}
+      {/* Footer: Pass button (or waiting status) + Exit */}
       <div className="flex items-end gap-1.5">
         {alreadySubmitted ? (
-          <div className="flex-1" />
+          <div className="flex-1 py-3 text-center text-emerald-300 font-semibold text-sm">✓ Passed</div>
         ) : (
           <button
             onClick={handleSubmit}
