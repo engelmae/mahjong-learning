@@ -359,6 +359,13 @@ export async function declareMahjong(gameId: string, playerId: string) {
   })
 }
 
+export async function declareWallExhausted(gameId: string) {
+  await update(ref(getDb()), {
+    [`games/${gameId}/status`]: 'finished',
+    [`games/${gameId}/winner`]: 'draw',
+  })
+}
+
 export async function swapJoker(
   gameId: string,
   setOwnerId: string,

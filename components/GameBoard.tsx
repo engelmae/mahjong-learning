@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { GameState, Tile } from '@/types/game'
 import TileComponent from './Tile'
-import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, swapJoker, resetGame } from '@/lib/gameActions'
+import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, declareWallExhausted, swapJoker, resetGame } from '@/lib/gameActions'
 import { VERSION } from '@/lib/version'
 import { useTileDrag } from '@/lib/useTileDrag'
 
@@ -143,6 +143,14 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     setDrawnTileId(null)
   }, [game.currentTurn])
 
+  // Wall exhaustion: when the active player would draw but nothing remains, end the game
+  const wallLeft = Math.max(0, (game.wall?.length ?? 0) - game.wallIndex)
+  useEffect(() => {
+    if (game.status === 'playing' && isMyTurn && !drewThisTurn && wallLeft === 0) {
+      declareWallExhausted(gameId)
+    }
+  }, [wallLeft, isMyTurn, drewThisTurn, game.status])
+
   const playerIds = Object.keys(game.players).sort(
     (a, b) => game.players[a].seatIndex - game.players[b].seatIndex
   )
@@ -242,16 +250,18 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
   // ── Finished ──────────────────────────────────────────────────────────────
   if (game.status === 'finished') {
-    const winner = game.winner ? game.players[game.winner] : null
+    const isDraw = game.winner === 'draw'
+    const winner = !isDraw && game.winner ? game.players[game.winner] : null
     return (
       <div className="flex flex-col h-full bg-[#152030] text-white gap-2 p-3 overflow-hidden" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-3xl">🀄</span>
+          <span className="text-3xl">{isDraw ? '🀫' : '🀄'}</span>
           <div className="flex-1 min-w-0">
-            <h2 className="text-xl font-bold leading-tight">Mahjong!</h2>
-            {winner && (
-              <p className="text-sm text-yellow-300">{game.winner === myPlayerId ? '🎉 You won!' : `${winner.nickname} wins!`}</p>
-            )}
+            <h2 className="text-xl font-bold leading-tight">{isDraw ? 'Wall Exhausted' : 'Mahjong!'}</h2>
+            {isDraw
+              ? <p className="text-sm text-slate-400">No tiles remain — game is a draw</p>
+              : winner && <p className="text-sm text-yellow-300">{game.winner === myPlayerId ? '🎉 You won!' : `${winner.nickname} wins!`}</p>
+            }
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={() => resetGame(gameId)} className="bg-yellow-400 text-black font-bold py-1.5 px-3 rounded-lg hover:bg-yellow-300 active:scale-95 text-sm">Play Again</button>
@@ -264,8 +274,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             const sortedHand = [...(p.hand ?? [])].sort(tileSort)
             const exposedTiles = (p.exposedSets ?? []).flatMap(s => s.tiles)
             return (
-              <div key={pid} className={`rounded-lg px-2 py-1 flex items-center gap-2 ${pid === game.winner ? 'bg-yellow-900/40 border border-yellow-400/60' : 'bg-black/20'}`}>
-                <p className="font-bold text-xs shrink-0 w-14 truncate">{p.nickname}{pid === game.winner ? ' 👑' : ''}</p>
+              <div key={pid} className={`rounded-lg px-2 py-1 flex items-center gap-2 ${!isDraw && pid === game.winner ? 'bg-yellow-900/40 border border-yellow-400/60' : 'bg-black/20'}`}>
+                <p className="font-bold text-xs shrink-0 w-14 truncate">{p.nickname}{!isDraw && pid === game.winner ? ' 👑' : ''}</p>
                 <div className="flex gap-0.5 overflow-x-auto">
                   {sortedHand.map(t => <TileComponent key={t.id} tile={t} small />)}
                   {exposedTiles.map((t, i) => <TileComponent key={`e-${i}`} tile={t} small />)}
@@ -283,8 +293,6 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const lastDiscardBy = pending
     ? game.players[pending.fromPlayerId]?.nickname
     : game.lastDiscard ? game.players[game.lastDiscard.fromPlayerId]?.nickname : null
-
-  const wallLeft = Math.max(0, (game.wall?.length ?? 0) - game.wallIndex)
 
   function renderActionPanel() {
     if (showClaim && canClaim) {
