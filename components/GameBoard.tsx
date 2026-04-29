@@ -45,6 +45,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const claimModeRef = useRef(false)
   claimModeRef.current = claimMode
   const justClaimedRef = useRef(false)
+  const pauseStartRef = useRef<number | null>(null)
+  const localExpiresAtRef = useRef<number>(0)
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
@@ -101,11 +103,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     }
 
     setShowClaim(true)
-    const expiresAt = pending.expiresAt
+    localExpiresAtRef.current = pending.expiresAt
+    pauseStartRef.current = null
     const tick = () => {
-      if (Date.now() >= expiresAt) {
-        setClaimMode(false)
-        setClaimSelection([])
+      if (claimModeRef.current) return
+      if (Date.now() >= localExpiresAtRef.current) {
         setShowClaim(false)
         passClaim(gameId)
       }
@@ -118,6 +120,17 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   useEffect(() => {
     if (!showClaim) { setClaimMode(false); setClaimSelection([]) }
   }, [showClaim])
+
+  // Pause/resume the JS expiry clock in sync with the CSS animation
+  useEffect(() => {
+    if (claimMode) {
+      pauseStartRef.current = Date.now()
+    } else if (pauseStartRef.current !== null) {
+      const remainingAtPause = localExpiresAtRef.current - pauseStartRef.current
+      localExpiresAtRef.current = Date.now() + Math.max(0, remainingAtPause)
+      pauseStartRef.current = null
+    }
+  }, [claimMode])
 
   useEffect(() => {
     if (justClaimedRef.current) {
