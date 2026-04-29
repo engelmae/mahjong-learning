@@ -103,8 +103,9 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     setShowClaim(true)
     const expiresAt = pending.expiresAt
     const tick = () => {
-      if (claimModeRef.current) return
       if (Date.now() >= expiresAt) {
+        setClaimMode(false)
+        setClaimSelection([])
         setShowClaim(false)
         passClaim(gameId)
       }
