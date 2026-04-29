@@ -1,19 +1,21 @@
 'use client'
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { Tile, GameState } from '@/types/game'
 import TileComponent from './Tile'
 import { submitCharlestionPass } from '@/lib/gameActions'
-import { VERSION } from '@/lib/version'
 import { useTileDrag } from '@/lib/useTileDrag'
 
 const PASS_SEQUENCE = [
-  { label: '→ First Right',  dir: 'right'  },
-  { label: '↕ First Across', dir: 'across' },
-  { label: '← First Left',   dir: 'left'   },
-  { label: '← Second Left',  dir: 'left'   },
-  { label: '↕ Second Across',dir: 'across' },
-  { label: '→ Second Right', dir: 'right'  },
+  { dir: 'right'  },
+  { dir: 'across' },
+  { dir: 'left'   },
+  { dir: 'left'   },
+  { dir: 'across' },
+  { dir: 'right'  },
 ]
+
+const DIR_LABEL: Record<string, string> = { right: 'Pass Right', across: 'Pass Across', left: 'Pass Left' }
+const DIR_SYMBOL: Record<string, string> = { right: '→', across: '↕', left: '←' }
 
 const SUIT_ORDER: Record<string, number> = { bam: 0, crak: 1, dot: 2, wind: 3, dragon: 4, flower: 5, joker: 6 }
 const WIND_ORDER: Record<string, number> = { E: 0, S: 1, W: 2, N: 3 }
@@ -52,9 +54,6 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
 
   const drag = useTileDrag(handOrder, setHandOrder)
 
-  // Combined effect: sync hand order + detect received tiles on round advance.
-  // Both deps fire simultaneously when a pass is processed; handling them in one
-  // effect prevents the round-clear from overwriting the just-detected new tiles.
   useEffect(() => {
     const currentIds = hand.map(t => t.id)
     const currentIdSet = new Set(currentIds)
@@ -114,26 +113,73 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     [drag.displayIds, hand]
   )
 
+  const passReady = selected.size === 3 && !drag.dragging && !alreadySubmitted && !submitting
+
   return (
-    <div className="flex flex-col h-full bg-[#152030] text-white p-3 gap-2" style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
-      {/* Header: title/info centered */}
-      <div className="text-center">
-        <h2 className="text-base font-bold">Charleston — Pass {roundIndex + 1}/6</h2>
-        <p className="text-emerald-300 text-sm">{currentPass.label}</p>
-        <p className="text-xs text-emerald-500">{playersReady}/{totalPlayers} ready · <span className="text-slate-700">{VERSION}</span></p>
+    <div className="flex flex-col h-full bg-[#152030] text-white px-3 pt-3 pb-2 gap-2"
+      style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
+
+      {/* Row 1: direction label centered, Pass button right */}
+      <div className="flex items-center">
+        <div className="w-20 shrink-0" />
+        <p className="flex-1 text-center text-base font-bold">
+          {DIR_LABEL[currentPass.dir]}
+        </p>
+        <div className="w-20 shrink-0 flex justify-end">
+          {alreadySubmitted ? (
+            <span className="text-emerald-400 text-sm font-semibold px-1">
+              ✓ {playersReady}/{totalPlayers}
+            </span>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={!passReady}
+              className={[
+                'py-1.5 px-3 rounded-lg font-bold text-sm transition-all active:scale-95',
+                passReady
+                  ? 'bg-[#5aabff] text-black'
+                  : 'bg-slate-700 text-slate-500 cursor-not-allowed',
+              ].join(' ')}
+            >
+              Pass {selected.size}/3
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Status hint — changes text instead of swapping screen */}
-      <p className="text-sm text-emerald-300 text-center">
-        {alreadySubmitted
-          ? `Passed! Waiting for others… (${playersReady}/${totalPlayers})`
-          : drag.dragging ? 'Slide to position, release to drop' : 'Tap 3 tiles to pass — or long-press to rearrange'}
-      </p>
+      {/* Row 2: 6-stage pass tracker */}
+      <div className="flex items-center justify-center gap-1.5">
+        {PASS_SEQUENCE.map((stage, i) => {
+          const isPast = i < roundIndex
+          const isCurrent = i === roundIndex
+          const isFarFuture = i >= 3 && roundIndex < 3
+          return (
+            <Fragment key={i}>
+              {i === 3 && <div className="w-px h-5 bg-slate-600 mx-0.5 self-stretch" />}
+              <div className={[
+                'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-200',
+                isCurrent
+                  ? 'bg-[#5aabff] text-black scale-110 shadow-[0_0_8px_rgba(90,171,255,0.5)]'
+                  : isPast
+                    ? 'bg-emerald-800 text-emerald-400'
+                    : isFarFuture
+                      ? 'bg-slate-800 text-slate-700'
+                      : 'bg-slate-700 text-slate-400',
+              ].join(' ')}>
+                {isPast ? '✓' : DIR_SYMBOL[stage.dir]}
+              </div>
+            </Fragment>
+          )
+        })}
+      </div>
 
-      {/* Hand with Sort just above it — always visible */}
+      {/* Tiles + Sort */}
       <div className="flex-1 flex flex-col justify-end">
         <div className="flex justify-end mb-1 pr-1">
-          <button onClick={sortHand} className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all">Sort</button>
+          <button onClick={sortHand}
+            className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-1.5 active:scale-95 transition-all">
+            Sort
+          </button>
         </div>
         <div className="flex justify-center">
           <div
@@ -180,25 +226,12 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
         </div>
       </div>
 
-      {/* Footer: Pass button (or waiting status) + Exit */}
-      <div className="flex items-end gap-1.5">
-        {alreadySubmitted ? (
-          <div className="flex-1 py-3 text-center text-emerald-300 font-semibold text-sm">✓ Passed</div>
-        ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={selected.size !== 3 || submitting || drag.dragging}
-            className={[
-              'flex-1 py-3 rounded-lg font-bold text-lg transition-all',
-              selected.size === 3 && !drag.dragging
-                ? 'bg-[#5aabff] hover:bg-[#7bbeff] text-black active:scale-95'
-                : 'bg-gray-600 text-gray-400 cursor-not-allowed',
-            ].join(' ')}
-          >
-            {submitting ? 'Passing…' : `Pass ${selected.size}/3 tiles`}
-          </button>
-        )}
-        <button onClick={onLeave} className="shrink-0 bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2 active:scale-95 transition-all" style={{ minWidth: 52 }}>Exit</button>
+      {/* Footer: Exit */}
+      <div className="flex justify-end">
+        <button onClick={onLeave}
+          className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-4 py-2 active:scale-95 transition-all">
+          Exit
+        </button>
       </div>
     </div>
   )
