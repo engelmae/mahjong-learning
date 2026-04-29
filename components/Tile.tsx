@@ -13,13 +13,14 @@ interface Props {
   selected?: boolean
   faceDown?: boolean
   small?: boolean
+  medium?: boolean
   onClick?: () => void
   disabled?: boolean
 }
 
-export default function Tile({ tile, selected, faceDown, small, onClick, disabled }: Props) {
-  const w = small ? 40 : 52
-  const h = small ? 54 : 70
+export default function Tile({ tile, selected, faceDown, small, medium, onClick, disabled }: Props) {
+  const w = small ? 40 : medium ? 44 : 52
+  const h = small ? 54 : medium ? 59 : 70
 
   if (faceDown) {
     if (onClick) return <button onClick={onClick}><FaceDown w={w} h={h} /></button>

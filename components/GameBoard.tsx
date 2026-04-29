@@ -459,7 +459,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                   <span className="absolute top-0.5 left-0 right-0 text-center text-[7px] text-amber-300 font-bold leading-none tracking-wide">
                     {set.claimType.toUpperCase()}
                   </span>
-                  {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} small />)}
+                  {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} medium />)}
                 </div>
               )
             }
@@ -483,7 +483,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               >
                 <TileComponent
                   tile={tile}
-                  small
+                  medium
                   selected={!drag.dragging && !claimMode && isMyTurn && drewThisTurn && selectedTile?.id === tile.id}
                   onClick={() => handleTileClick(tile)}
                 />
