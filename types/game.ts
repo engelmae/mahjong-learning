@@ -26,6 +26,7 @@ export interface Player {
   isReady: boolean
   charlestionSelection: Tile[]
   charlestionReady: boolean
+  isBot?: boolean
 }
 
 export interface PendingClaim {

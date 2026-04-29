@@ -2,87 +2,9 @@ import { ref, set, update, get, onValue, off } from 'firebase/database'
 import { getDb } from './firebase'
 import { GameState, Tile, ExposedSet, CharlestionDirection } from '@/types/game'
 import { buildDeck, shuffleDeck, dealHands } from './tiles'
+import { botPickDiscard, botDecideClaim, botPickExposeSet } from './botLogic'
 
-export async function createTestGame(
-  gameId: string,
-  hostId: string,
-  hostNickname: string
-): Promise<string[]> {
-  const botIds = [`bot1${gameId}`, `bot2${gameId}`, `bot3${gameId}`]
-  const botNames = ['Bot Amy', 'Bot Ben', 'Bot Cal']
-
-  const players: GameState['players'] = {
-    [hostId]: {
-      nickname: hostNickname,
-      seatIndex: 0,
-      hand: [],
-      exposedSets: [],
-      discards: [],
-      isReady: false,
-      charlestionSelection: [],
-      charlestionReady: false,
-    },
-  }
-  botIds.forEach((bid, i) => {
-    players[bid] = {
-      nickname: botNames[i],
-      seatIndex: i + 1,
-      hand: [],
-      exposedSets: [],
-      discards: [],
-      isReady: false,
-      charlestionSelection: [],
-      charlestionReady: false,
-    }
-  })
-
-  const initialState: GameState = {
-    status: 'waiting',
-    hostId,
-    players,
-    wall: [],
-    wallIndex: 0,
-    currentTurn: '',
-    lastDiscard: null,
-    pendingClaim: null,
-    charlestionRound: 0,
-    charlestionDirection: 'right',
-    winner: null,
-  }
-
-  await set(gameRef(gameId), initialState)
-  return botIds
-}
-
-export async function botTakeTurn(gameId: string, botId: string) {
-  const snap = await get(gameRef(gameId))
-  const game = snap.val() as GameState
-  if (game.currentTurn !== botId || game.status !== 'playing') return
-
-  const tile = game.wall[game.wallIndex]
-  if (!tile) return
-
-  const newHand = [...game.players[botId].hand, tile]
-  const candidates = newHand.filter(t => !t.isJoker)
-  const toDiscard = candidates[Math.floor(Math.random() * candidates.length)] ?? newHand[0]
-  const finalHand = newHand.filter(t => t.id !== toDiscard.id)
-  const newDiscards = [...(game.players[botId].discards ?? []), toDiscard]
-
-  await update(ref(getDb()), {
-    [`games/${gameId}/wallIndex`]: game.wallIndex + 1,
-    [`games/${gameId}/players/${botId}/hand`]: finalHand,
-    [`games/${gameId}/players/${botId}/discards`]: newDiscards,
-    [`games/${gameId}/lastDiscard`]: { tile: toDiscard, fromPlayerId: botId },
-    [`games/${gameId}/pendingClaim`]: {
-      tile: toDiscard,
-      fromPlayerId: botId,
-      expiresAt: Date.now() + 8000,
-    },
-    [`games/${gameId}/currentTurn`]: '',
-  })
-}
-
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function gameRef(gameId: string) {
   return ref(getDb(), `games/${gameId}`)
@@ -92,24 +14,25 @@ function playerRef(gameId: string, playerId: string) {
   return ref(getDb(), `games/${gameId}/players/${playerId}`)
 }
 
-// ── create / join ─────────────────────────────────────────────────────────────
+function makePlayer(nickname: string, seatIndex: number, isBot = false) {
+  return {
+    nickname,
+    seatIndex,
+    hand: [],
+    exposedSets: [],
+    discards: [],
+    isReady: false,
+    charlestionSelection: [],
+    charlestionReady: false,
+    ...(isBot ? { isBot: true } : {}),
+  }
+}
 
-export async function createGame(gameId: string, hostId: string, nickname: string) {
-  const initialState: GameState = {
+function blankGameState(hostId: string): GameState {
+  return {
     status: 'waiting',
     hostId,
-    players: {
-      [hostId]: {
-        nickname,
-        seatIndex: 0,
-        hand: [],
-        exposedSets: [],
-        discards: [],
-        isReady: false,
-        charlestionSelection: [],
-        charlestionReady: false,
-      },
-    },
+    players: {},
     wall: [],
     wallIndex: 0,
     currentTurn: '',
@@ -119,7 +42,30 @@ export async function createGame(gameId: string, hostId: string, nickname: strin
     charlestionDirection: 'right',
     winner: null,
   }
-  await set(gameRef(gameId), initialState)
+}
+
+// ── create / join ─────────────────────────────────────────────────────────────
+
+export async function createGame(gameId: string, hostId: string, nickname: string) {
+  const state = blankGameState(hostId)
+  state.players[hostId] = makePlayer(nickname, 0)
+  await set(gameRef(gameId), state)
+}
+
+export async function createGameWithBots(
+  gameId: string,
+  hostId: string,
+  nickname: string,
+  botCount: 1 | 2 | 3
+) {
+  const botNames = ['Bot Amy', 'Bot Ben', 'Bot Cal']
+  const state = blankGameState(hostId)
+  state.players[hostId] = makePlayer(nickname, 0)
+  for (let i = 0; i < botCount; i++) {
+    const botId = `bot${i}_${gameId}`
+    state.players[botId] = makePlayer(botNames[i], i + 1, true)
+  }
+  await set(gameRef(gameId), state)
 }
 
 export async function joinGame(gameId: string, playerId: string, nickname: string) {
@@ -129,16 +75,7 @@ export async function joinGame(gameId: string, playerId: string, nickname: strin
   const seatIndex = Object.keys(game.players).length
   if (seatIndex >= 4) throw new Error('Game is full')
 
-  await update(playerRef(gameId, playerId), {
-    nickname,
-    seatIndex,
-    hand: [],
-    exposedSets: [],
-    discards: [],
-    isReady: false,
-    charlestionSelection: [],
-    charlestionReady: false,
-  })
+  await update(playerRef(gameId, playerId), makePlayer(nickname, seatIndex))
 }
 
 // ── subscribe ─────────────────────────────────────────────────────────────────
@@ -191,13 +128,9 @@ export async function submitCharlestionPass(
     [`games/${gameId}/players/${playerId}/charlestionReady`]: true,
   })
 
-  // Check if all players are ready
   const snap = await get(gameRef(gameId))
   const game = snap.val() as GameState
-  const players = game.players
-  const allReady = Object.values(players).every(p => p.charlestionReady)
-
-  if (allReady) {
+  if (Object.values(game.players).every(p => p.charlestionReady)) {
     await processCharlestionRound(gameId, game)
   }
 }
@@ -209,38 +142,24 @@ async function processCharlestionRound(gameId: string, game: GameState) {
   const dir = game.charlestionDirection
   const players = game.players
 
-  // Build new hands by removing selected tiles and receiving from neighbor
   const selections = playerIds.map(pid => players[pid].charlestionSelection ?? [])
   const hands = playerIds.map(pid => {
     const selectedIds = new Set((players[pid].charlestionSelection ?? []).map((t: Tile) => t.id))
     return players[pid].hand.filter((t: Tile) => !selectedIds.has(t.id))
   })
 
-  // Determine who receives whose tiles
-  const n = playerIds.length // 4
+  const n = playerIds.length
   const received: Tile[][] = hands.map(() => [])
 
   if (dir === 'right') {
-    // seat 0 passes to seat 1, seat 1 to seat 2, etc.
-    for (let i = 0; i < n; i++) {
-      const to = (i + 1) % n
-      received[to].push(...selections[i])
-    }
+    for (let i = 0; i < n; i++) received[(i + 1) % n].push(...selections[i])
   } else if (dir === 'across') {
-    for (let i = 0; i < n; i++) {
-      const to = (i + 2) % n
-      received[to].push(...selections[i])
-    }
+    for (let i = 0; i < n; i++) received[(i + 2) % n].push(...selections[i])
   } else {
-    // left: seat 0 passes to seat 3, etc.
-    for (let i = 0; i < n; i++) {
-      const to = (i + n - 1) % n
-      received[to].push(...selections[i])
-    }
+    for (let i = 0; i < n; i++) received[(i + n - 1) % n].push(...selections[i])
   }
 
   const nextRound = game.charlestionRound + 1
-  // Full Charleston: Right, Across, Left, Left, Across, Right (6 passes)
   const directions: CharlestionDirection[] = ['right', 'across', 'left', 'left', 'across', 'right']
   const nextDir = directions[nextRound] ?? 'right'
   const done = nextRound >= 6
@@ -310,7 +229,6 @@ export async function claimDiscard(
   const exposedSet: ExposedSet = { tiles: setTiles, claimType }
   const newExposed = [...(game.players[claimantId].exposedSets ?? []), exposedSet]
 
-  // Remove from the discard pile of the person who discarded
   const fromPid = game.lastDiscard!.fromPlayerId
   const fromDiscards = (game.players[fromPid].discards ?? []).filter(t => t.id !== discardedTile.id)
 
@@ -351,6 +269,65 @@ export async function passClaim(gameId: string) {
     [`games/${gameId}/currentTurn`]: nextPid,
   })
 }
+
+// ── bot actions ───────────────────────────────────────────────────────────────
+
+// Bot draws a tile then discards — used for normal turns
+export async function botTakeTurn(gameId: string, botId: string) {
+  const snap = await get(gameRef(gameId))
+  const game = snap.val() as GameState
+  if (game.currentTurn !== botId || game.status !== 'playing') return
+
+  const tile = game.wall[game.wallIndex]
+  if (!tile) return  // wall exhausted — GameBoard effect handles it
+
+  const newHand = [...game.players[botId].hand, tile]
+  const toDiscard = botPickDiscard(newHand)
+  const finalHand = newHand.filter(t => t.id !== toDiscard.id)
+  const newDiscards = [...(game.players[botId].discards ?? []), toDiscard]
+
+  await update(ref(getDb()), {
+    [`games/${gameId}/wallIndex`]: game.wallIndex + 1,
+    [`games/${gameId}/players/${botId}/hand`]: finalHand,
+    [`games/${gameId}/players/${botId}/discards`]: newDiscards,
+    [`games/${gameId}/lastDiscard`]: { tile: toDiscard, fromPlayerId: botId },
+    [`games/${gameId}/pendingClaim`]: {
+      tile: toDiscard,
+      fromPlayerId: botId,
+      expiresAt: Date.now() + 8000,
+    },
+    [`games/${gameId}/currentTurn`]: '',
+  })
+}
+
+// Bot claims a discard then immediately discards — used when a bot wins the claim window
+export async function botClaimAndDiscard(gameId: string, botId: string): Promise<boolean> {
+  const snap = await get(gameRef(gameId))
+  const game = snap.val() as GameState
+  if (!game.pendingClaim || game.pendingClaim.fromPlayerId === botId) return false
+  if (game.status !== 'playing') return false
+
+  const hand = game.players[botId].hand
+  const discardedTile = game.pendingClaim.tile
+  const claimType = botDecideClaim(hand, discardedTile)
+  if (!claimType) return false
+
+  const tilesFromHand = botPickExposeSet(hand, discardedTile, claimType)
+  await claimDiscard(gameId, botId, claimType, tilesFromHand, discardedTile)
+
+  // Brief pause then discard
+  await new Promise(r => setTimeout(r, 700 + Math.random() * 600))
+
+  const snap2 = await get(gameRef(gameId))
+  const game2 = snap2.val() as GameState
+  if (game2.currentTurn !== botId || game2.status !== 'playing') return true
+
+  const toDiscard = botPickDiscard(game2.players[botId].hand)
+  await discardTile(gameId, botId, toDiscard)
+  return true
+}
+
+// ── game lifecycle ────────────────────────────────────────────────────────────
 
 export async function declareMahjong(gameId: string, playerId: string) {
   await update(ref(getDb()), {
@@ -430,14 +407,14 @@ export async function leaveGame(gameId: string, playerId: string) {
     [`games/${gameId}/players/${playerId}`]: null,
   }
 
-  const remainingCount = Object.keys(game.players).length - 1
-  if (remainingCount === 0) {
+  const remainingEntries = Object.entries(game.players).filter(([pid]) => pid !== playerId)
+  if (remainingEntries.length === 0) {
     await set(gameRef(gameId), null)
     return
   }
 
-  // End the game if host left or not enough players mid-game
-  if (game.hostId === playerId || (game.status !== 'waiting' && remainingCount < 4)) {
+  const remainingHumans = remainingEntries.filter(([, p]) => !p.isBot).length
+  if (game.hostId === playerId || (game.status !== 'waiting' && remainingHumans === 0)) {
     updates[`games/${gameId}/status`] = 'abandoned'
   }
 

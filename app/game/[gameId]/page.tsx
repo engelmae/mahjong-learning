@@ -2,7 +2,8 @@
 import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
-import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, submitCharlestionPass } from '@/lib/gameActions'
+import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass } from '@/lib/gameActions'
+import { botPickCharleston, botDecideClaim } from '@/lib/botLogic'
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
 
@@ -23,10 +24,6 @@ export default function GamePage({ params }: Props) {
   const [copied, setCopied] = useState(false)
   const [dealing, setDealing] = useState(false)
 
-  const [botIds] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    try { return JSON.parse(sessionStorage.getItem(`mahjong_bots_${gameId}`) ?? '[]') } catch { return [] }
-  })
   const botActed = useRef<Set<string>>(new Set())
 
   // Restore or prompt for identity
@@ -45,31 +42,82 @@ export default function GamePage({ params }: Props) {
     return unsub
   }, [gameId])
 
-  // Bot engine (test mode only)
+  // Clear acted set on game reset so bots can act fresh in the new game
   useEffect(() => {
-    if (!game || !botIds.length) return
-    const acted = botActed.current
+    if (game?.status === 'waiting') botActed.current.clear()
+  }, [game?.status])
 
+  // Auto-deal when all seats are filled and the game has bots (host only)
+  useEffect(() => {
+    if (!game || !myPlayerId) return
+    const isHost = game.hostId === myPlayerId
+    if (!isHost || game.status !== 'waiting') return
+    const players = Object.values(game.players)
+    const hasBots = players.some(p => p.isBot)
+    if (hasBots && players.length === 4) {
+      const t = setTimeout(() => dealGame(gameId), 1500)
+      return () => clearTimeout(t)
+    }
+  }, [game?.status, Object.keys(game?.players ?? {}).length, myPlayerId])
+
+  // Bot engine — runs only on the host's client
+  useEffect(() => {
+    if (!game || !myPlayerId) return
+    const isHost = game.hostId === myPlayerId
+    if (!isHost) return
+
+    const bots = Object.entries(game.players)
+      .filter(([, p]) => p.isBot)
+      .map(([id]) => id)
+    if (!bots.length) return
+
+    // Charleston: auto-submit for bots that haven't passed yet
     if (game.status === 'charleston') {
-      botIds.forEach(botId => {
+      bots.forEach(botId => {
         const p = game.players[botId]
         if (!p || p.charlestionReady) return
         const key = `char-${botId}-${game.charlestionRound}`
-        if (acted.has(key)) return
-        acted.add(key)
-        const selection = [...p.hand].sort(() => Math.random() - 0.5).slice(0, 3)
+        if (botActed.current.has(key)) return
+        botActed.current.add(key)
+        const selection = botPickCharleston(p.hand)
         setTimeout(() => submitCharlestionPass(gameId, botId, selection), 600 + Math.random() * 600)
       })
+      return
     }
 
-    if (game.status === 'playing' && game.currentTurn && botIds.includes(game.currentTurn)) {
-      const botId = game.currentTurn
-      const key = `turn-${botId}-${game.wallIndex}`
-      if (acted.has(key)) return
-      acted.add(key)
-      setTimeout(() => botTakeTurn(gameId, botId), 1200 + Math.random() * 800)
+    if (game.status !== 'playing') return
+
+    // Claim window: check if any bot wants to pung/kong
+    if (game.pendingClaim) {
+      const pending = game.pendingClaim
+      for (const botId of bots) {
+        if (botId === pending.fromPlayerId) continue
+        const hand = game.players[botId]?.hand ?? []
+        const claimType = botDecideClaim(hand, pending.tile)
+        if (!claimType) continue
+
+        const key = `claim-${botId}-${pending.tile.id}`
+        if (botActed.current.has(key)) break
+        botActed.current.add(key)
+        // Pre-register the turn key so the turn branch below skips this bot's
+        // upcoming currentTurn (set by claimDiscard) and doesn't try to draw
+        botActed.current.add(`turn-${botId}-${game.wallIndex}`)
+
+        setTimeout(() => botClaimAndDiscard(gameId, botId), 1000 + Math.random() * 1000)
+        break  // only one bot claims per discard
+      }
+      return  // don't process turns while a claim window is open
     }
-  }, [game?.status, game?.currentTurn, game?.charlestionRound])
+
+    // Normal turn: bot draws then discards
+    if (!game.currentTurn || !bots.includes(game.currentTurn)) return
+    const botId = game.currentTurn
+    const key = `turn-${botId}-${game.wallIndex}`
+    if (botActed.current.has(key)) return
+    botActed.current.add(key)
+    setTimeout(() => botTakeTurn(gameId, botId), 1200 + Math.random() * 800)
+
+  }, [game?.status, game?.currentTurn, game?.charlestionRound, game?.pendingClaim?.tile?.id, myPlayerId])
 
   async function handleJoin() {
     if (!nickname.trim()) { setError('Enter a nickname'); return }
@@ -191,6 +239,8 @@ export default function GamePage({ params }: Props) {
   const players = Object.values(game.players).sort((a, b) => a.seatIndex - b.seatIndex)
   const isHost = game.hostId === myPlayerId
   const playerCount = players.length
+  const botCount = players.filter(p => p.isBot).length
+  const openSeats = 4 - playerCount
 
   // ── Waiting lobby ─────────────────────────────────────────────────────────
   if (game.status === 'waiting') {
@@ -205,12 +255,8 @@ export default function GamePage({ params }: Props) {
           }
           right={
             <div className="space-y-2 w-full">
-              {botIds.length > 0 ? (
-                <div className="bg-emerald-900/40 border border-emerald-700/50 rounded-xl px-3 py-2">
-                  <p className="text-emerald-300 text-sm font-semibold text-center">Solo Test Mode</p>
-                  <p className="text-emerald-500 text-xs text-center">3 bots will play automatically</p>
-                </div>
-              ) : (
+              {/* Share link — only when human seats are still open */}
+              {openSeats > 0 && (
                 <div className="bg-[#152030] rounded-xl px-3 py-2 space-y-1.5 border border-slate-700/50">
                   <p className="text-slate-300 text-sm font-medium">Share with friends:</p>
                   <div className="flex gap-2">
@@ -225,19 +271,25 @@ export default function GamePage({ params }: Props) {
                 </div>
               )}
 
+              {/* Player list */}
               <div className="bg-[#152030] rounded-xl px-3 py-2 space-y-1 border border-slate-700/50">
-                <p className="text-slate-300 text-sm font-medium mb-1">Players ({playerCount}/4)</p>
+                <p className="text-slate-300 text-sm font-medium mb-1">
+                  Players ({playerCount - botCount}/{4 - botCount})
+                </p>
                 {players.map(p => (
                   <div key={p.seatIndex} className="flex items-center gap-2 text-white text-sm">
                     <span className="text-emerald-500">#{p.seatIndex + 1}</span>
                     <span>{p.nickname}</span>
-                    {game.players[game.hostId]?.seatIndex === p.seatIndex && (
+                    {p.isBot && (
+                      <span className="text-[10px] bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded font-bold">BOT</span>
+                    )}
+                    {game.players[game.hostId]?.seatIndex === p.seatIndex && !p.isBot && (
                       <span className="text-[10px] bg-yellow-400 text-black px-1.5 py-0.5 rounded font-bold">Host</span>
                     )}
                   </div>
                 ))}
-                {playerCount < 4 && (
-                  <p className="text-slate-500 text-xs pt-0.5">Waiting for {4 - playerCount} more…</p>
+                {openSeats > 0 && (
+                  <p className="text-slate-500 text-xs pt-0.5">Waiting for {openSeats} more player{openSeats > 1 ? 's' : ''}…</p>
                 )}
               </div>
 
