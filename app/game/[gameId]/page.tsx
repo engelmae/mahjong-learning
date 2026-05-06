@@ -3,7 +3,7 @@ import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
 import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass } from '@/lib/gameActions'
-import { botPickCharleston, botDecideClaim } from '@/lib/botLogic'
+import { botPickCharleston, botDecideClaim, buildVisibility } from '@/lib/botLogic'
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
 
@@ -79,7 +79,9 @@ export default function GamePage({ params }: Props) {
         const key = `char-${botId}-${game.charlestionRound}`
         if (botActed.current.has(key)) return
         botActed.current.add(key)
-        const selection = botPickCharleston(p.hand)
+        const allDiscards = Object.values(game.players).flatMap(pl => pl.discards ?? [])
+        const vis = buildVisibility(allDiscards, [])
+        const selection = botPickCharleston(p.hand, p.exposedSets ?? [], vis)
         setTimeout(() => submitCharlestionPass(gameId, botId, selection), 600 + Math.random() * 600)
       })
       return
@@ -93,7 +95,10 @@ export default function GamePage({ params }: Props) {
       for (const botId of bots) {
         if (botId === pending.fromPlayerId) continue
         const hand = game.players[botId]?.hand ?? []
-        const claimType = botDecideClaim(hand, pending.tile)
+        const botExposed = game.players[botId]?.exposedSets ?? []
+        const allDiscards = Object.values(game.players).flatMap(pl => pl.discards ?? [])
+        const visForClaim = buildVisibility(allDiscards, [])
+        const claimType = botDecideClaim(hand, botExposed, pending.tile, visForClaim)
         if (!claimType) continue
 
         const key = `claim-${botId}-${pending.tile.id}`

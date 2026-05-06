@@ -2,7 +2,7 @@ import { ref, set, update, get, onValue, off } from 'firebase/database'
 import { getDb } from './firebase'
 import { GameState, Tile, ExposedSet, CharlestionDirection } from '@/types/game'
 import { buildDeck, shuffleDeck, dealHands } from './tiles'
-import { botPickDiscard, botDecideClaim, botPickExposeSet } from './botLogic'
+import { botPickDiscard, botDecideClaim, botPickExposeSet, botCheckWin, buildVisibility } from './botLogic'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -282,7 +282,26 @@ export async function botTakeTurn(gameId: string, botId: string) {
   if (!tile) return  // wall exhausted — GameBoard effect handles it
 
   const newHand = [...game.players[botId].hand, tile]
-  const toDiscard = botPickDiscard(newHand)
+  const botExposed: ExposedSet[] = game.players[botId].exposedSets ?? []
+
+  // Build tile visibility from all discards + opponent exposed sets
+  const allDiscards = Object.values(game.players).flatMap(p => p.discards ?? [])
+  const opponentExposed = Object.entries(game.players)
+    .filter(([pid]) => pid !== botId)
+    .flatMap(([, p]) => (p.exposedSets ?? []).flatMap((s: ExposedSet) => s.tiles))
+  const vis = buildVisibility(allDiscards, opponentExposed)
+
+  // Win check before discarding
+  if (botCheckWin(newHand, botExposed, vis)) {
+    await update(ref(getDb()), {
+      [`games/${gameId}/wallIndex`]: game.wallIndex + 1,
+      [`games/${gameId}/players/${botId}/hand`]: newHand,
+    })
+    await declareMahjong(gameId, botId)
+    return
+  }
+
+  const toDiscard = botPickDiscard(newHand, botExposed, vis)
   const finalHand = newHand.filter(t => t.id !== toDiscard.id)
   const newDiscards = [...(game.players[botId].discards ?? []), toDiscard]
 
@@ -308,9 +327,22 @@ export async function botClaimAndDiscard(gameId: string, botId: string): Promise
   if (game.status !== 'playing') return false
 
   const hand = game.players[botId].hand
+  const botExposed: ExposedSet[] = game.players[botId].exposedSets ?? []
   const discardedTile = game.pendingClaim.tile
-  const claimType = botDecideClaim(hand, discardedTile)
+
+  const allDiscards = Object.values(game.players).flatMap(p => p.discards ?? [])
+  const opponentExposed = Object.entries(game.players)
+    .filter(([pid]) => pid !== botId)
+    .flatMap(([, p]) => (p.exposedSets ?? []).flatMap((s: ExposedSet) => s.tiles))
+  const vis = buildVisibility(allDiscards, opponentExposed)
+
+  const claimType = botDecideClaim(hand, botExposed, discardedTile, vis)
   if (!claimType) return false
+
+  if (claimType === 'mahjong') {
+    await claimDiscard(gameId, botId, 'mahjong', [], discardedTile)
+    return true
+  }
 
   const tilesFromHand = botPickExposeSet(hand, discardedTile, claimType)
   await claimDiscard(gameId, botId, claimType, tilesFromHand, discardedTile)
@@ -322,7 +354,20 @@ export async function botClaimAndDiscard(gameId: string, botId: string): Promise
   const game2 = snap2.val() as GameState
   if (game2.currentTurn !== botId || game2.status !== 'playing') return true
 
-  const toDiscard = botPickDiscard(game2.players[botId].hand)
+  const newBotExposed2: ExposedSet[] = game2.players[botId].exposedSets ?? []
+  const allDiscards2 = Object.values(game2.players).flatMap(p => p.discards ?? [])
+  const oppExposed2 = Object.entries(game2.players)
+    .filter(([pid]) => pid !== botId)
+    .flatMap(([, p]) => (p.exposedSets ?? []).flatMap((s: ExposedSet) => s.tiles))
+  const vis2 = buildVisibility(allDiscards2, oppExposed2)
+
+  // Win check after claim (in case claiming completed the hand)
+  if (botCheckWin(game2.players[botId].hand, newBotExposed2, vis2)) {
+    await declareMahjong(gameId, botId)
+    return true
+  }
+
+  const toDiscard = botPickDiscard(game2.players[botId].hand, newBotExposed2, vis2)
   await discardTile(gameId, botId, toDiscard)
   return true
 }

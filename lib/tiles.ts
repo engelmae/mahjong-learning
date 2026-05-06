@@ -48,8 +48,8 @@ export function buildDeck(): Tile[] {
     }
   }
 
-  // 4 flowers
-  for (let i = 0; i < 4; i++) {
+  // 8 flowers
+  for (let i = 0; i < 8; i++) {
     tiles.push(makeTile('flower', 'Flower', uid()))
   }
 
