@@ -197,21 +197,18 @@ function scoreBinding(
   jokerCount: number,
   vis: TileVisibility,
 ): number {
-  if (def.concealed && allTiles.some(t => !t.isJoker)) {
-    // Concealed check handled at call site (allTiles includes exposed)
-  }
-
   const freq = buildFreqMap(allTiles)
-  let totalDeficit = 0
+  let hardDeficit = 0   // deficit in jokerOk:false groups — jokers cannot substitute
+  let softDeficit = 0   // deficit in jokerOk:true groups — jokers may fill these
   let weightedScore = 0
 
   for (const g of def.groups) {
     const options = resolveGroup(g, binding)
     if (!options) return Infinity
 
-    // For multi-option groups (any/opp dragon): pick the option with lowest deficit
     let bestDeficit = Infinity
     let bestWeight = Infinity
+    let bestOptSet: Array<{ key: string; need: number }> | null = null
 
     for (const optSet of groupOptions(options, g)) {
       let deficit = 0
@@ -219,40 +216,53 @@ function scoreBinding(
       const tempFreq = { ...freq }
 
       for (const { key, need } of optSet) {
-        const have = tempFreq[key] ?? 0
+        const have = Math.max(0, tempFreq[key] ?? 0)
         const raw = Math.max(0, need - have)
         deficit += raw
-        if (raw > 0) {
-          weight += scarWeight(key, raw, vis)
-          tempFreq[key] = Math.max(0, have - need)
-        } else {
-          tempFreq[key] = have - need
-        }
+        if (raw > 0) weight += scarWeight(key, raw, vis)
+        tempFreq[key] = have - need
       }
 
       if (deficit < bestDeficit || (deficit === bestDeficit && weight < bestWeight)) {
         bestDeficit = deficit
         bestWeight = weight
-        // Apply consumption to freq map for this option
-        for (const { key, need } of optSet) {
-          freq[key] = Math.max(0, (freq[key] ?? 0) - need)
-        }
+        bestOptSet = optSet
       }
     }
 
-    totalDeficit += bestDeficit
-    weightedScore += bestDeficit > 0 ? bestWeight : 0
+    // Commit only the best option's consumption to the shared freq map
+    if (bestOptSet) {
+      for (const { key, need } of bestOptSet) {
+        freq[key] = Math.max(0, (freq[key] ?? 0) - need)
+      }
+    }
+
+    if (bestDeficit > 0) {
+      weightedScore += bestWeight
+      if (g.jokerOk) {
+        softDeficit += bestDeficit
+      } else {
+        hardDeficit += bestDeficit  // jokers CANNOT fill these
+      }
+    }
   }
 
-  // Assign jokers to jokerOk groups with deficit
-  const jokerReducible = Math.min(jokerCount, totalDeficit)
-  // Jokers reduce weighted score proportionally (greedy: apply to highest-weight deficits first)
-  // Simple approximation: subtract jokerReducible × average weight
-  const avgWeight = totalDeficit > 0 ? weightedScore / totalDeficit : 0
-  weightedScore -= jokerReducible * avgWeight
-  totalDeficit -= jokerReducible
+  // Jokers may only substitute for jokerOk:true tiles
+  const jokerFill = Math.min(jokerCount, softDeficit)
+  const totalRaw = hardDeficit + softDeficit
+  const avgWeight = totalRaw > 0 ? weightedScore / totalRaw : 0
+  weightedScore -= jokerFill * avgWeight
+  softDeficit -= jokerFill
 
-  return totalDeficit === 0 ? 0 : Math.max(0, weightedScore)
+  const remaining = hardDeficit + softDeficit
+  if (remaining > 0) return Math.max(0, weightedScore)
+
+  // All groups satisfied — verify no natural tiles were left unconsumed.
+  // Every tile in the hand must participate in the winning pattern.
+  const leftover = Object.values(freq).reduce((s, v) => s + Math.max(0, v), 0)
+  if (leftover > 0) return leftover  // extra tiles ≠ valid mahjong
+
+  return 0
 }
 
 // Given a list of (key, need) for a group, return the "option sets" to try.
