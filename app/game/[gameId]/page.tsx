@@ -2,7 +2,7 @@
 import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
-import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass } from '@/lib/gameActions'
+import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass, passClaim } from '@/lib/gameActions'
 import { botPickCharleston, botDecideClaim, buildVisibility } from '@/lib/botLogic'
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
@@ -92,6 +92,8 @@ export default function GamePage({ params }: Props) {
     // Claim window: check if any bot wants to pung/kong
     if (game.pendingClaim) {
       const pending = game.pendingClaim
+      let botWillClaim = false
+
       for (const botId of bots) {
         if (botId === pending.fromPlayerId) continue
         const hand = game.players[botId]?.hand ?? []
@@ -102,15 +104,32 @@ export default function GamePage({ params }: Props) {
         if (!claimType) continue
 
         const key = `claim-${botId}-${pending.tile.id}`
-        if (botActed.current.has(key)) break
+        if (botActed.current.has(key)) { botWillClaim = true; break }
         botActed.current.add(key)
         // Pre-register the turn key so the turn branch below skips this bot's
         // upcoming currentTurn (set by claimDiscard) and doesn't try to draw
         botActed.current.add(`turn-${botId}-${game.wallIndex}`)
 
         setTimeout(() => botClaimAndDiscard(gameId, botId), 1000 + Math.random() * 1000)
+        botWillClaim = true
         break  // only one bot claims per discard
       }
+
+      // All bots passed: if the discarding player is human and every other player
+      // is a bot, skip the countdown and advance the turn immediately.
+      if (!botWillClaim && !pending.claimingPlayerId) {
+        const discarder = game.players[pending.fromPlayerId]
+        const otherHumans = Object.entries(game.players)
+          .filter(([id, p]) => id !== pending.fromPlayerId && !p.isBot).length
+        if (discarder && !discarder.isBot && otherHumans === 0) {
+          const key = `autopass-${pending.tile.id}`
+          if (!botActed.current.has(key)) {
+            botActed.current.add(key)
+            setTimeout(() => passClaim(gameId), 500)
+          }
+        }
+      }
+
       return  // don't process turns while a claim window is open
     }
 
