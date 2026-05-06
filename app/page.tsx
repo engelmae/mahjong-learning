@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { nanoid } from 'nanoid'
 import { createGame, createGameWithBots } from '@/lib/gameActions'
+import { BotDifficulty } from '@/types/game'
 import { VERSION } from '@/lib/version'
 
 const INPUT = "w-full bg-[#1c2e42] text-white rounded-lg px-4 py-3 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 border border-slate-700"
@@ -18,6 +19,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<'home' | 'create' | 'join'>('home')
   const [botCount, setBotCount] = useState<0 | 1 | 2 | 3>(0)
+  const [difficulty, setDifficulty] = useState<BotDifficulty>('moderate')
 
   async function handleCreate() {
     if (!nickname.trim()) { setError('Enter a nickname'); return }
@@ -28,7 +30,7 @@ export default function Home() {
       sessionStorage.setItem(`mahjong_player_${gameId}`, playerId)
       sessionStorage.setItem(`mahjong_nickname_${gameId}`, nickname.trim())
       if (botCount > 0) {
-        await createGameWithBots(gameId, playerId, nickname.trim(), botCount as 1 | 2 | 3)
+        await createGameWithBots(gameId, playerId, nickname.trim(), botCount as 1 | 2 | 3, difficulty)
       } else {
         await createGame(gameId, playerId, nickname.trim())
       }
@@ -47,8 +49,6 @@ export default function Home() {
 
   const createLabel = botCount === 3
     ? (loading ? 'Starting…' : 'Play Solo')
-    : botCount > 0
-    ? (loading ? 'Creating…' : 'Create Game')
     : (loading ? 'Creating…' : 'Create & Share Link')
 
   return (
@@ -112,9 +112,32 @@ export default function Home() {
                     ? 'Share the link with up to 3 friends'
                     : botCount === 3
                     ? 'Play solo against 3 bots — starts immediately'
-                    : `${botCount} bot${botCount > 1 ? 's' : ''} fill the remaining seat${botCount > 1 ? 's' : ''} — share link for ${3 - botCount} more`}
+                    : `${botCount} bot${botCount > 1 ? 's' : ''} + ${3 - botCount} human${3 - botCount > 1 ? 's' : ''} — share link to fill seats`}
                 </p>
               </div>
+
+              {/* Bot difficulty selector — only when bots are present */}
+              {botCount > 0 && (
+                <div>
+                  <p className="text-slate-400 text-sm mb-2">Bot difficulty</p>
+                  <div className="flex gap-1.5">
+                    {(['beginner', 'easy', 'moderate', 'difficult'] as BotDifficulty[]).map(d => (
+                      <button
+                        key={d}
+                        onClick={() => setDifficulty(d)}
+                        className={[
+                          'flex-1 py-1.5 rounded-lg font-bold text-xs transition-all active:scale-95 capitalize',
+                          difficulty === d
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600',
+                        ].join(' ')}
+                      >
+                        {d.charAt(0).toUpperCase() + d.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {error && <p className="text-amber-400 text-sm">{error}</p>}
 

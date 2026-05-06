@@ -52,6 +52,15 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
   const totalPlayers = Object.keys(game.players).length
   const hand = me?.hand ?? []
 
+  const sortedPlayerIds = Object.keys(game.players).sort(
+    (a, b) => game.players[a].seatIndex - game.players[b].seatIndex
+  )
+  const myIdx = sortedPlayerIds.indexOf(myPlayerId)
+  const n = sortedPlayerIds.length
+  const recipientOffset = currentPass.dir === 'right' ? 1 : currentPass.dir === 'across' ? 2 : n - 1
+  const recipientId = sortedPlayerIds[(myIdx + recipientOffset) % n]
+  const recipientName = game.players[recipientId]?.nickname ?? '…'
+
   const drag = useTileDrag(handOrder, setHandOrder)
 
   useEffect(() => {
@@ -124,6 +133,7 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
         <div className="w-20 shrink-0" />
         <p className="flex-1 text-center text-base font-bold">
           {DIR_LABEL[currentPass.dir]}
+          <span className="text-slate-400 font-normal text-sm"> → {recipientName}</span>
         </p>
         <div className="w-20 shrink-0 flex justify-end">
           {alreadySubmitted ? (

@@ -1,6 +1,6 @@
 import { ref, set, update, get, onValue, off } from 'firebase/database'
 import { getDb } from './firebase'
-import { GameState, Tile, ExposedSet, CharlestionDirection } from '@/types/game'
+import { GameState, Tile, ExposedSet, CharlestionDirection, BotDifficulty } from '@/types/game'
 import { buildDeck, shuffleDeck, dealHands } from './tiles'
 import { botPickDiscard, botDecideClaim, botPickExposeSet, botCheckWin, buildVisibility } from './botLogic'
 
@@ -56,11 +56,13 @@ export async function createGameWithBots(
   gameId: string,
   hostId: string,
   nickname: string,
-  botCount: 1 | 2 | 3
+  botCount: 1 | 2 | 3,
+  difficulty: BotDifficulty = 'moderate'
 ) {
-  const botNames = ['Bot Amy', 'Bot Ben', 'Bot Cal']
+  const botNames = ['Amy', 'Ben', 'Cal']
   const state = blankGameState(hostId)
   state.players[hostId] = makePlayer(nickname, 0)
+  state.botDifficulty = difficulty
   for (let i = 0; i < botCount; i++) {
     const botId = `bot${i}_${gameId}`
     state.players[botId] = makePlayer(botNames[i], i + 1, true)
@@ -200,6 +202,24 @@ export async function discardTile(gameId: string, playerId: string, tile: Tile) 
   const newHand = game.players[playerId].hand.filter(t => t.id !== tile.id)
   const newDiscards = [...(game.players[playerId].discards ?? []), tile]
 
+  const playerIds = Object.keys(game.players).sort(
+    (a, b) => game.players[a].seatIndex - game.players[b].seatIndex
+  )
+  const fromIdx = playerIds.indexOf(playerId)
+  const nextTurn = playerIds[(fromIdx + 1) % playerIds.length]
+
+  // Jokers are never callable — skip the claim window entirely
+  if (tile.isJoker) {
+    await update(ref(getDb()), {
+      [`games/${gameId}/players/${playerId}/hand`]: newHand,
+      [`games/${gameId}/players/${playerId}/discards`]: newDiscards,
+      [`games/${gameId}/lastDiscard`]: { tile, fromPlayerId: playerId },
+      [`games/${gameId}/pendingClaim`]: null,
+      [`games/${gameId}/currentTurn`]: nextTurn,
+    })
+    return
+  }
+
   await update(ref(getDb()), {
     [`games/${gameId}/players/${playerId}/hand`]: newHand,
     [`games/${gameId}/players/${playerId}/discards`]: newDiscards,
@@ -270,6 +290,19 @@ export async function passClaim(gameId: string) {
   })
 }
 
+export async function enterClaimMode(gameId: string, playerId: string) {
+  await update(ref(getDb()), {
+    [`games/${gameId}/pendingClaim/claimingPlayerId`]: playerId,
+  })
+}
+
+export async function exitClaimMode(gameId: string) {
+  await update(ref(getDb()), {
+    [`games/${gameId}/pendingClaim/claimingPlayerId`]: null,
+    [`games/${gameId}/pendingClaim/expiresAt`]: Date.now() + 6000,
+  })
+}
+
 // ── bot actions ───────────────────────────────────────────────────────────────
 
 // Bot draws a tile then discards — used for normal turns
@@ -304,6 +337,25 @@ export async function botTakeTurn(gameId: string, botId: string) {
   const toDiscard = botPickDiscard(newHand, botExposed, vis)
   const finalHand = newHand.filter(t => t.id !== toDiscard.id)
   const newDiscards = [...(game.players[botId].discards ?? []), toDiscard]
+
+  const playerIds = Object.keys(game.players).sort(
+    (a, b) => game.players[a].seatIndex - game.players[b].seatIndex
+  )
+  const botIdx = playerIds.indexOf(botId)
+  const nextTurn = playerIds[(botIdx + 1) % playerIds.length]
+
+  // Jokers are never callable — skip claim window
+  if (toDiscard.isJoker) {
+    await update(ref(getDb()), {
+      [`games/${gameId}/wallIndex`]: game.wallIndex + 1,
+      [`games/${gameId}/players/${botId}/hand`]: finalHand,
+      [`games/${gameId}/players/${botId}/discards`]: newDiscards,
+      [`games/${gameId}/lastDiscard`]: { tile: toDiscard, fromPlayerId: botId },
+      [`games/${gameId}/pendingClaim`]: null,
+      [`games/${gameId}/currentTurn`]: nextTurn,
+    })
+    return
+  }
 
   await update(ref(getDb()), {
     [`games/${gameId}/wallIndex`]: game.wallIndex + 1,

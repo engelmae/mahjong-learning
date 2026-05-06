@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { GameState, Tile } from '@/types/game'
 import TileComponent from './Tile'
-import { drawTile, discardTile, claimDiscard, passClaim, declareMahjong, declareWallExhausted, swapJoker, resetGame } from '@/lib/gameActions'
+import { drawTile, discardTile, claimDiscard, passClaim, enterClaimMode, exitClaimMode, declareMahjong, declareWallExhausted, swapJoker, resetGame } from '@/lib/gameActions'
 import { VERSION } from '@/lib/version'
 import { useTileDrag } from '@/lib/useTileDrag'
 
@@ -52,7 +52,11 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const isMyTurn = game.currentTurn === myPlayerId
   const pending = game.pendingClaim
   const isMyDiscard = pending?.fromPlayerId === myPlayerId
+  const someoneElseClaiming = !!pending?.claimingPlayerId && pending.claimingPlayerId !== myPlayerId
   const canClaim = !!pending && !isMyDiscard && game.status === 'playing'
+
+  const pendingRef = useRef(pending)
+  pendingRef.current = pending
 
   // Locked in once per discard tile — only recomputes when pending.tile.id changes,
   // so re-renders from claimMode/selection changes never produce a new duration string
@@ -97,6 +101,8 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     if (!pending) { setShowClaim(false); return }
 
     if (isMyDiscard) {
+      // Don't auto-advance while someone is actively in claim mode
+      if (pending.claimingPlayerId) return
       const remaining = Math.max(0, pending.expiresAt - Date.now())
       const t = setTimeout(() => passClaim(gameId), remaining + 300)
       return () => clearTimeout(t)
@@ -107,6 +113,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     pauseStartRef.current = null
     const tick = () => {
       if (claimModeRef.current) return
+      if (pendingRef.current?.claimingPlayerId) return  // someone else is considering
       if (Date.now() >= localExpiresAtRef.current) {
         setShowClaim(false)
         passClaim(gameId)
@@ -115,7 +122,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     tick()
     const interval = setInterval(tick, 500)
     return () => clearInterval(interval)
-  }, [pending?.tile?.id, isMyDiscard])
+  }, [pending?.tile?.id, pending?.claimingPlayerId, isMyDiscard])
 
   useEffect(() => {
     if (!showClaim) { setClaimMode(false); setClaimSelection([]) }
@@ -188,6 +195,17 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     setDrewThisTurn(false)
   }
 
+  async function handleEnterClaimMode() {
+    setClaimMode(true)
+    await enterClaimMode(gameId, myPlayerId)
+  }
+
+  async function handleCancelClaimMode() {
+    setClaimMode(false)
+    setClaimSelection([])
+    await exitClaimMode(gameId)
+  }
+
   async function handleExpose() {
     if (!pending || claimSelection.length < 2) return
     const type = claimSelection.length >= 3 ? 'kong' : 'pung'
@@ -218,13 +236,20 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   function tileName(tile: Tile): string {
     if (tile.isJoker) return 'a Joker'
     if (tile.suit === 'flower') return 'a Flower'
-    if (tile.suit === 'wind') return `${tile.value} Wind`
+    if (tile.suit === 'wind') {
+      const WIND_NAMES: Record<string, string> = { N: 'a North', S: 'a South', E: 'an East', W: 'a West' }
+      return WIND_NAMES[String(tile.value)] ?? `a ${tile.value} Wind`
+    }
     if (tile.suit === 'dragon') return String(tile.value)
     const s = tile.suit.charAt(0).toUpperCase() + tile.suit.slice(1)
     return `a ${tile.value} ${s}`
   }
 
   function getStatusText(): string {
+    if (pending?.claimingPlayerId && !claimMode) {
+      const name = game.players[pending.claimingPlayerId]?.nickname ?? '…'
+      return isMyDiscard ? `${name} is calling…` : `${name} is calling…`
+    }
     if (showClaim && canClaim) {
       if (claimMode) return 'Tap tiles to expose'
       const thrower = game.players[pending!.fromPlayerId]?.nickname ?? '…'
@@ -304,12 +329,23 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
               className={canExpose ? BTN_CALL + ' btn-pulse-amber' : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
               Expose ({claimSelection.length + 1})
             </button>
-            <button onClick={() => { setClaimMode(false); setClaimSelection([]) }} className={BTN_OUTLINE}>Cancel</button>
+            <button onClick={handleCancelClaimMode} className={BTN_OUTLINE}>Cancel</button>
           </>
         )
       }
+      if (someoneElseClaiming) {
+        const name = game.players[pending!.claimingPlayerId!]?.nickname ?? '…'
+        return (
+          <button disabled className={BTN_MUTED + ' opacity-50 text-xs'}>
+            {name} is calling…
+          </button>
+        )
+      }
       return (
-        <button onClick={() => setClaimMode(true)} className={BTN_CALL + ' btn-pulse-amber'}>Call</button>
+        <>
+          <button onClick={handleEnterClaimMode} className={BTN_CALL + ' btn-pulse-amber'}>Wait · Call</button>
+          <button onClick={() => { setShowClaim(false); passClaim(gameId) }} className={BTN_OUTLINE}>No Thanks</button>
+        </>
       )
     }
     if (isMyTurn && !drewThisTurn) {
@@ -340,42 +376,45 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           {opponents.map(pid => {
             const opp = game.players[pid]
             const isOppTurn = game.currentTurn === pid
+            const isCalling = pending?.claimingPlayerId === pid
             const jokerSets = (opp.exposedSets ?? []).filter(s => s.tiles.some(t => t.isJoker))
             const otherSets = (opp.exposedSets ?? []).filter(s => !s.tiles.some(t => t.isJoker))
             const expEntries = [...jokerSets, ...otherSets].flatMap((set) =>
               set.tiles.map((t, ti) => ({ t, set, origSi: (opp.exposedSets ?? []).indexOf(set), ti }))
-            ).slice(0, 8)
+            )
 
             return (
-              <div key={pid} className={`rounded px-1 py-0.5 shrink-0 border ${isOppTurn ? 'bg-yellow-600/20 border-yellow-500/60' : 'bg-black/20 border-transparent'}`}>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-semibold shrink-0 w-14 truncate">{opp.nickname}</span>
-                  <div className="flex gap-0.5 overflow-hidden flex-1 min-w-0">
-                    {Array.from({ length: Math.min(opp.hand?.length ?? 0, 20) }).map((_, i) => (
-                      <TileComponent key={i} tile={{ id: `fd-${pid}-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
-                    ))}
-                  </div>
+              <div key={pid} className={`rounded px-1 py-0.5 shrink-0 border ${isOppTurn ? 'bg-yellow-600/20 border-yellow-500/60' : isCalling ? 'bg-amber-900/20 border-amber-500/40' : 'bg-black/20 border-transparent'}`}>
+                <div className="flex items-center gap-0.5 overflow-x-auto">
+                  <span className="text-xs font-semibold shrink-0 w-14 truncate">
+                    {opp.nickname}{isCalling ? ' 🤔' : ''}
+                  </span>
+                  {/* Face-down tiles */}
+                  {Array.from({ length: Math.min(opp.hand?.length ?? 0, 20) }).map((_, i) => (
+                    <TileComponent key={i} tile={{ id: `fd-${pid}-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
+                  ))}
+                  {/* Divider between hidden and exposed */}
+                  {expEntries.length > 0 && (
+                    <div className="w-px bg-slate-500/60 self-stretch mx-0.5 shrink-0" />
+                  )}
+                  {/* Exposed tiles */}
+                  {expEntries.map(({ t, set, origSi, ti }) => {
+                    const matchTile = isMyTurn && t.isJoker
+                      ? me?.hand.find(h => !h.isJoker && h.suit === set.tiles.find(x => !x.isJoker)?.suit && h.value === set.tiles.find(x => !x.isJoker)?.value)
+                      : undefined
+                    return (
+                      <div key={t.id} className="relative shrink-0">
+                        <TileComponent tile={t} small />
+                        {matchTile && (
+                          <button
+                            onClick={() => handleJokerSwap(pid, origSi, ti, t, matchTile)}
+                            className="absolute -top-1 -right-1 bg-yellow-400 text-black text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold z-10"
+                          >⇄</button>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-                {expEntries.length > 0 && (
-                  <div className="flex gap-0.5 mt-0.5 overflow-x-auto">
-                    {expEntries.map(({ t, set, origSi, ti }) => {
-                      const matchTile = isMyTurn && t.isJoker
-                        ? me?.hand.find(h => !h.isJoker && h.suit === set.tiles.find(x => !x.isJoker)?.suit && h.value === set.tiles.find(x => !x.isJoker)?.value)
-                        : undefined
-                      return (
-                        <div key={t.id} className="relative shrink-0">
-                          <TileComponent tile={t} small />
-                          {matchTile && (
-                            <button
-                              onClick={() => handleJokerSwap(pid, origSi, ti, t, matchTile)}
-                              className="absolute -top-1 -right-1 bg-yellow-400 text-black text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-bold z-10"
-                            >⇄</button>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
               </div>
             )
           })}

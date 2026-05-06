@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useEffect } from 'react'
+import { useState, useRef, useMemo } from 'react'
 
 /**
  * Long-press-to-drag reordering for a horizontal tile row.
@@ -24,23 +24,21 @@ export function useTileDrag(
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // All mutable drag state lives in a ref to avoid stale closures
   const dragRef = useRef<{
     id: string
-    insertBefore: string | null  // null → append at end
-    started: boolean             // long press fired?
+    insertBefore: string | null
+    started: boolean
     startX: number
     startY: number
+    pointerId: number
   } | null>(null)
 
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressClick = useRef(false)
 
-  // Reactive state for re-renders
   const [dragId, setDragId] = useState<string | null>(null)
   const [insertBefore, setInsertBefore] = useState<string | null | undefined>(undefined)
 
-  // Live display order: reposition the dragged tile while dragging
   const displayIds = useMemo(() => {
     if (!dragId || insertBefore === undefined) return orderedIds
     const without = orderedIds.filter(id => id !== dragId)
@@ -59,10 +57,16 @@ export function useTileDrag(
 
   function onTileDown(e: React.PointerEvent, tileId: string) {
     clearLongPress()
-    // Initialize insertBefore to current position so cancel/immediate-release stays in place
     const currentIdx = orderedIds.indexOf(tileId)
     const currentInsertBefore = currentIdx < orderedIds.length - 1 ? orderedIds[currentIdx + 1] : null
-    dragRef.current = { id: tileId, insertBefore: currentInsertBefore, started: false, startX: e.clientX, startY: e.clientY }
+    dragRef.current = {
+      id: tileId,
+      insertBefore: currentInsertBefore,
+      started: false,
+      startX: e.clientX,
+      startY: e.clientY,
+      pointerId: e.pointerId,
+    }
 
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null
@@ -72,17 +76,20 @@ export function useTileDrag(
       setDragId(tileId)
       setInsertBefore(undefined)
       navigator.vibrate?.(40)
-    }, 420)
+      // Capture pointer on container so moves aren't lost to scroll
+      containerRef.current?.setPointerCapture(dragRef.current.pointerId)
+    }, 300)
   }
 
   function onMove(e: React.PointerEvent) {
     if (!dragRef.current) return
 
-    // Cancel long press if finger moved too far before it fired
+    // Cancel long press if finger moved significantly vertically (scroll intent)
+    // Allow generous horizontal movement — user may shift finger while pressing
     if (!dragRef.current.started && longPressTimer.current) {
-      const dx = Math.abs(e.clientX - dragRef.current.startX)
       const dy = Math.abs(e.clientY - dragRef.current.startY)
-      if (dx > 8 || dy > 8) {
+      const dx = Math.abs(e.clientX - dragRef.current.startX)
+      if (dy > 14 || dx > 50) {
         clearLongPress()
         dragRef.current = null
         return
@@ -114,13 +121,14 @@ export function useTileDrag(
     }
   }
 
-  function onUp(_e: React.PointerEvent) {
+  function commitDrag() {
     clearLongPress()
     if (!dragRef.current) return
-    const { id, insertBefore: ib, started } = dragRef.current
+    const { id, insertBefore: ib, started, pointerId } = dragRef.current
     dragRef.current = null
 
     if (started) {
+      containerRef.current?.releasePointerCapture(pointerId)
       setOrderedIds(prev => {
         const without = prev.filter(x => x !== id)
         if (ib === null) return [...without, id]
@@ -134,23 +142,13 @@ export function useTileDrag(
     setInsertBefore(undefined)
   }
 
+  function onUp(_e: React.PointerEvent) {
+    commitDrag()
+  }
+
   function onCancel() {
-    clearLongPress()
-    if (!dragRef.current) return
-    const { id, insertBefore: ib, started } = dragRef.current
-    dragRef.current = null
-    // Commit current position rather than reverting — prevents accidental "snap back"
-    if (started) {
-      setOrderedIds(prev => {
-        const without = prev.filter(x => x !== id)
-        if (ib === null) return [...without, id]
-        const idx = without.indexOf(ib)
-        if (idx === -1) return [...without, id]
-        return [...without.slice(0, idx), id, ...without.slice(idx)]
-      })
-    }
-    setDragId(null)
-    setInsertBefore(undefined)
+    // Commit current position rather than reverting — prevents accidental snap-back
+    commitDrag()
     suppressClick.current = false
   }
 
@@ -160,13 +158,12 @@ export function useTileDrag(
       flexShrink: 0,
       position: 'relative',
       zIndex: isLifted ? 20 : 1,
-      transform: isLifted ? 'translateY(-12px) scale(1.08)' : 'translateY(0) scale(1)',
+      transform: isLifted ? 'translateY(-14px) scale(1.1)' : 'translateY(0) scale(1)',
       transition: isLifted ? 'none' : 'transform 0.12s ease',
-      filter: isLifted ? 'drop-shadow(0 6px 8px rgba(0,0,0,0.6))' : undefined,
+      filter: isLifted ? 'drop-shadow(0 8px 10px rgba(0,0,0,0.7))' : undefined,
     }
   }
 
-  /** Call this in onClick handlers — returns true if the click should be ignored (was a drag). */
   function consumeClick(): boolean {
     if (suppressClick.current) {
       suppressClick.current = false

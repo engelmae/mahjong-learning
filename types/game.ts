@@ -33,7 +33,10 @@ export interface PendingClaim {
   tile: Tile
   fromPlayerId: string
   expiresAt: number
+  claimingPlayerId?: string | null
 }
+
+export type BotDifficulty = 'beginner' | 'easy' | 'moderate' | 'difficult'
 
 export interface GameState {
   status: GameStatus
@@ -47,4 +50,5 @@ export interface GameState {
   charlestionRound: number
   charlestionDirection: CharlestionDirection
   winner: string | null
+  botDifficulty?: BotDifficulty
 }
