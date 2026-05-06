@@ -242,7 +242,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     }
     if (tile.suit === 'dragon') return String(tile.value)
     const s = tile.suit.charAt(0).toUpperCase() + tile.suit.slice(1)
-    return `a ${tile.value} ${s}`
+    return `${tile.value} ${s}`
   }
 
   function getStatusText(): string {
