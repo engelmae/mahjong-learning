@@ -193,6 +193,26 @@ Lobby UI also shows: **"Copy"** button for sharing link; **"Leave Game"** button
    ```
 
 ## Vercel Deployment
+
+### Live deployment (current)
+- **Live URL**: https://mahjong-learning-beryl.vercel.app
+- **Vercel project**: `explorers-projects-5cad580b/mahjong-learning` (account: `teampolicystudio`)
+- **Firebase project**: `mahjong-learning` (Realtime Database in test mode — rules expire ~30 days from creation; tighten before sharing widely)
+- **Env vars set on Vercel** (Production + Development): `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_DATABASE_URL`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`. Preview env not configured (not needed for the live link).
+- **Git auto-deploy**: not connected. To ship a new version, run from this repo:
+  ```
+  node_modules/.bin/vercel --prod --yes
+  ```
+  (The Vercel CLI lives in `node_modules` after a one-time `npm install vercel` — kept out of `package.json` to avoid bloating the lockfile.)
+- **Project link**: the `.vercel/` directory is gitignored and contains the project ID linking this directory to the Vercel project. If a fresh clone needs to deploy, run `vercel link --yes --project mahjong-learning` after `vercel login`.
+
+### How it was set up (from-scratch reference)
+1. `npx vercel login` (device-code flow via GitHub)
+2. `npx vercel link --yes --project mahjong-learning`
+3. For each var, for each environment: `echo "<value>" | npx vercel env add <NAME> <production|development>`
+4. `npx vercel --prod --yes` → returns deployment URL + stable alias
+
+### Original dashboard-based path (alternate)
 1. Push code to GitHub
 2. Import repo on vercel.com
 3. Add all `NEXT_PUBLIC_FIREBASE_*` env vars in Vercel dashboard
