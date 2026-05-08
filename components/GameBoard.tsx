@@ -502,7 +502,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
           {/* Status bar */}
           <div className="flex items-center gap-2 px-1 mt-auto shrink-0">
-            <p className="text-[9px] text-slate-600 shrink-0 whitespace-nowrap leading-none">{wallLeft} in wall · {VERSION}</p>
+            <p className="text-[11px] text-slate-400 shrink-0 whitespace-nowrap leading-none">{wallLeft} in wall · {VERSION}</p>
             <p className={`text-xs font-bold ${getStatusColor()} flex-1 text-center leading-none`}>{getStatusText()}</p>
           </div>
         </div>

@@ -107,7 +107,7 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                <p className="text-slate-500 text-xs mt-1.5">
+                <p className="text-slate-300 text-sm mt-1.5">
                   {botCount === 0
                     ? 'Share the link with up to 3 friends'
                     : botCount === 3
