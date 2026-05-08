@@ -2,8 +2,18 @@
 import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
-import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass, passClaim } from '@/lib/gameActions'
+import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass, voteNoThanks } from '@/lib/gameActions'
 import { botPickCharleston, botDecideClaim, buildVisibility } from '@/lib/botLogic'
+
+const PLAYER_KEY = (gameId: string) => `mahjong_player_${gameId}`
+const NICK_KEY = (gameId: string) => `mahjong_nickname_${gameId}`
+
+function readPlayerId(gameId: string): string | null {
+  if (typeof window === 'undefined') return null
+  // localStorage persists across tabs and sessions so a closed tab can rejoin.
+  // Fall back to sessionStorage to migrate any in-flight games from the old scheme.
+  return window.localStorage.getItem(PLAYER_KEY(gameId)) ?? window.sessionStorage.getItem(PLAYER_KEY(gameId))
+}
 import Charleston from '@/components/Charleston'
 import GameBoard from '@/components/GameBoard'
 
@@ -28,7 +38,7 @@ export default function GamePage({ params }: Props) {
 
   // Restore or prompt for identity
   useEffect(() => {
-    const storedId = sessionStorage.getItem(`mahjong_player_${gameId}`)
+    const storedId = readPlayerId(gameId)
     if (storedId) {
       setMyPlayerId(storedId)
     } else {
@@ -93,6 +103,7 @@ export default function GamePage({ params }: Props) {
     if (game.pendingClaim) {
       const pending = game.pendingClaim
       let botWillClaim = false
+      const declinedBots: string[] = []
 
       for (const botId of bots) {
         if (botId === pending.fromPlayerId) continue
@@ -101,7 +112,10 @@ export default function GamePage({ params }: Props) {
         const allDiscards = Object.values(game.players).flatMap(pl => pl.discards ?? [])
         const visForClaim = buildVisibility(allDiscards, [])
         const claimType = botDecideClaim(hand, botExposed, pending.tile, visForClaim)
-        if (!claimType) continue
+        if (!claimType) {
+          declinedBots.push(botId)
+          continue
+        }
 
         const key = `claim-${botId}-${pending.tile.id}`
         if (botActed.current.has(key)) { botWillClaim = true; break }
@@ -115,18 +129,16 @@ export default function GamePage({ params }: Props) {
         break  // only one bot claims per discard
       }
 
-      // All bots passed: if the discarding player is human and every other player
-      // is a bot, skip the countdown and advance the turn immediately.
-      if (!botWillClaim && !pending.claimingPlayerId) {
-        const discarder = game.players[pending.fromPlayerId]
-        const otherHumans = Object.entries(game.players)
-          .filter(([id, p]) => id !== pending.fromPlayerId && !p.isBot).length
-        if (discarder && !discarder.isBot && otherHumans === 0) {
-          const key = `autopass-${pending.tile.id}`
-          if (!botActed.current.has(key)) {
-            botActed.current.add(key)
-            setTimeout(() => passClaim(gameId), 500)
-          }
+      // Each bot that doesn't want to claim votes "no thanks" so the consensus
+      // count visible to humans is accurate and the window can short-circuit
+      // once every human has also passed.
+      if (!botWillClaim) {
+        for (const botId of declinedBots) {
+          if (pending.noThanksBy?.[botId]) continue
+          const key = `nothanks-${botId}-${pending.tile.id}`
+          if (botActed.current.has(key)) continue
+          botActed.current.add(key)
+          setTimeout(() => voteNoThanks(gameId, botId), 400 + Math.random() * 400)
         }
       }
 
@@ -149,8 +161,8 @@ export default function GamePage({ params }: Props) {
     try {
       const playerId = crypto.randomUUID()
       await joinGame(gameId, playerId, nickname.trim())
-      sessionStorage.setItem(`mahjong_player_${gameId}`, playerId)
-      sessionStorage.setItem(`mahjong_nickname_${gameId}`, nickname.trim())
+      window.localStorage.setItem(PLAYER_KEY(gameId), playerId)
+      window.localStorage.setItem(NICK_KEY(gameId), nickname.trim())
       setMyPlayerId(playerId)
       setShowNicknameModal(false)
     } catch (e: any) {
@@ -162,9 +174,15 @@ export default function GamePage({ params }: Props) {
 
   async function handleLeave() {
     if (!myPlayerId) { router.push('/'); return }
-    await leaveGame(gameId, myPlayerId)
-    sessionStorage.removeItem(`mahjong_player_${gameId}`)
-    sessionStorage.removeItem(`mahjong_nickname_${gameId}`)
+    // leaveGame returns true if the seat was kept (mid-game pause). In that case
+    // we DO NOT clear localStorage so the same browser can rejoin via the link.
+    const seatKept = await leaveGame(gameId, myPlayerId)
+    if (!seatKept) {
+      window.localStorage.removeItem(PLAYER_KEY(gameId))
+      window.localStorage.removeItem(NICK_KEY(gameId))
+      window.sessionStorage.removeItem(PLAYER_KEY(gameId))
+      window.sessionStorage.removeItem(NICK_KEY(gameId))
+    }
     router.push('/')
   }
 

@@ -34,6 +34,7 @@ export interface PendingClaim {
   fromPlayerId: string
   expiresAt: number
   claimingPlayerId?: string | null
+  noThanksBy?: Record<string, true>
 }
 
 export type BotDifficulty = 'beginner' | 'easy' | 'moderate' | 'difficult'

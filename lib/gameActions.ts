@@ -187,18 +187,31 @@ async function processCharlestionRound(gameId: string, game: GameState) {
 export async function drawTile(gameId: string, playerId: string) {
   const snap = await get(gameRef(gameId))
   const game = snap.val() as GameState
+  // Race guard: only draw if it's actually our turn and we haven't already drawn.
+  // hand + sum(exposed set sizes) is 13 between turns and 14 after a draw or
+  // claim — refuse the draw if we're already at 14 (prevents double-draw from
+  // double-clicks or stale local state).
+  if (game.currentTurn !== playerId) return
+  const me = game.players[playerId]
+  if (!me) return
+  const handLen = me.hand?.length ?? 0
+  const exposedTiles = (me.exposedSets ?? []).reduce((s, e) => s + (e.tiles?.length ?? 0), 0)
+  if (handLen + exposedTiles >= 14) return
   const tile = game.wall[game.wallIndex]
   if (!tile) throw new Error('Wall is empty')
 
   await update(ref(getDb()), {
     [`games/${gameId}/wallIndex`]: game.wallIndex + 1,
-    [`games/${gameId}/players/${playerId}/hand`]: [...game.players[playerId].hand, tile],
+    [`games/${gameId}/players/${playerId}/hand`]: [...me.hand, tile],
   })
 }
 
 export async function discardTile(gameId: string, playerId: string, tile: Tile) {
   const snap = await get(gameRef(gameId))
   const game = snap.val() as GameState
+  // Race guard: refuse if the tile isn't actually in hand (already discarded by a duplicate call)
+  const handHasTile = (game.players[playerId]?.hand ?? []).some(t => t.id === tile.id)
+  if (!handHasTile) return
   const newHand = game.players[playerId].hand.filter(t => t.id !== tile.id)
   const newDiscards = [...(game.players[playerId].discards ?? []), tile]
 
@@ -242,6 +255,9 @@ export async function claimDiscard(
 ) {
   const snap = await get(gameRef(gameId))
   const game = snap.val() as GameState
+  // Race guard: only proceed if this discard is still pending and matches the tile.
+  // Prevents a stale claim from re-firing after the discard already resolved.
+  if (!game.pendingClaim || game.pendingClaim.tile.id !== discardedTile.id) return
   const hand = game.players[claimantId].hand
   const usedIds = new Set(tilesFromHand.map(t => t.id))
   const newHand = hand.filter(t => !usedIds.has(t.id))
@@ -268,6 +284,34 @@ export async function claimDiscard(
   }
 
   await update(ref(getDb()), updates)
+}
+
+// Player explicitly declines to claim. When every non-discarder player has
+// declined (or already passed), short-circuit the claim window via passClaim.
+// Bots vote via this same path so consensus works in mixed bot/human games.
+export async function voteNoThanks(gameId: string, playerId: string) {
+  const snap = await get(gameRef(gameId))
+  const game = snap.val() as GameState
+  if (!game.pendingClaim) return
+  if (game.pendingClaim.fromPlayerId === playerId) return
+  // Don't override someone actively in claim mode — they're still considering
+  if (game.pendingClaim.claimingPlayerId === playerId) return
+
+  await update(ref(getDb()), {
+    [`games/${gameId}/pendingClaim/noThanksBy/${playerId}`]: true,
+  })
+
+  // Re-read so the consensus check uses post-write state — concurrent voters
+  // would otherwise each see only their own vote and never trigger passClaim.
+  const snap2 = await get(gameRef(gameId))
+  const game2 = snap2.val() as GameState
+  if (!game2.pendingClaim) return
+  if (game2.pendingClaim.tile.id !== game.pendingClaim.tile.id) return
+  const fresh = game2.pendingClaim.noThanksBy ?? {}
+  const eligible = Object.keys(game2.players).filter(pid => pid !== game2.pendingClaim!.fromPlayerId)
+  if (eligible.every(pid => fresh[pid])) {
+    await passClaim(gameId)
+  }
 }
 
 export async function passClaim(gameId: string) {
@@ -495,10 +539,19 @@ export async function resetGame(gameId: string) {
   await update(ref(getDb()), updates)
 }
 
-export async function leaveGame(gameId: string, playerId: string) {
+// Mid-game exits "pause" the seat so the same link can rejoin and pick up the
+// hand. Pre-game (waiting) and post-game (finished/abandoned) exits remove the
+// player entirely. Returns true if the seat was kept (rejoin possible).
+export async function leaveGame(gameId: string, playerId: string): Promise<boolean> {
   const snap = await get(gameRef(gameId))
-  if (!snap.exists()) return
+  if (!snap.exists()) return false
   const game = snap.val() as GameState
+
+  const isMidGame = game.status === 'charleston' || game.status === 'playing'
+  if (isMidGame && game.players[playerId]) {
+    // Don't remove from Firebase — leave the seat & hand intact for rejoin.
+    return true
+  }
 
   const updates: Record<string, unknown> = {
     [`games/${gameId}/players/${playerId}`]: null,
@@ -507,7 +560,7 @@ export async function leaveGame(gameId: string, playerId: string) {
   const remainingEntries = Object.entries(game.players).filter(([pid]) => pid !== playerId)
   if (remainingEntries.length === 0) {
     await set(gameRef(gameId), null)
-    return
+    return false
   }
 
   const remainingHumans = remainingEntries.filter(([, p]) => !p.isBot).length
@@ -516,4 +569,5 @@ export async function leaveGame(gameId: string, playerId: string) {
   }
 
   await update(ref(getDb()), updates)
+  return false
 }

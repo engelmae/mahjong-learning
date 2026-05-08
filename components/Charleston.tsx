@@ -36,6 +36,8 @@ interface Props {
   onLeave: () => void
 }
 
+const HAND_ORDER_KEY = (gameId: string, playerId: string) => `mahjong_handOrder_${gameId}_${playerId}`
+
 export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
@@ -68,11 +70,26 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     const currentIdSet = new Set(currentIds)
     const prev = prevHandRef.current
     const roundChanged = prevRoundRef.current !== roundIndex
+    const isInitialMount = prev.length === 0 && currentIds.length > 0
 
     setHandOrder(prevOrder => {
-      const retained = prevOrder.filter(id => currentIdSet.has(id))
-      const newIds = currentIds.filter(id => !new Set(retained).has(id))
-      return [...retained, ...newIds]
+      let seed = prevOrder
+      // First mount: seed from localStorage if the user has a saved order from
+      // the lobby/previous session for this game (preserves intent across reloads).
+      if (isInitialMount && prevOrder.length === 0 && typeof window !== 'undefined') {
+        try {
+          const saved = window.localStorage.getItem(HAND_ORDER_KEY(gameId, myPlayerId))
+          if (saved) seed = JSON.parse(saved) as string[]
+        } catch {}
+      }
+      const seedSet = new Set(seed)
+      const retained = seed.filter(id => currentIdSet.has(id))
+      const retainedSet = new Set(retained)
+      const newIds = currentIds.filter(id => !retainedSet.has(id) && !seedSet.has(id))
+      // Tiles that were in seed but missing from prevOrder (rare): also include any current
+      // ids not yet in retained
+      const tail = currentIds.filter(id => !retainedSet.has(id) && !newIds.includes(id))
+      return [...retained, ...newIds, ...tail]
     })
 
     if (roundChanged) {
@@ -86,7 +103,16 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     }
 
     prevHandRef.current = currentIds
-  }, [hand.map(t => t.id).join(','), roundIndex])
+  }, [hand.map(t => t.id).join(','), roundIndex, gameId, myPlayerId])
+
+  // Persist hand order so GameBoard can restore it when the game starts.
+  useEffect(() => {
+    if (handOrder.length === 0) return
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(HAND_ORDER_KEY(gameId, myPlayerId), JSON.stringify(handOrder))
+    } catch {}
+  }, [handOrder, gameId, myPlayerId])
 
   function sortHand() {
     setHandOrder([...hand].sort(tileSort).map(t => t.id))
@@ -128,9 +154,15 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
     <div className="flex flex-col h-full bg-[#152030] text-white px-3 pt-3 pb-2 gap-2"
       style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
 
-      {/* Row 1: direction label centered, Pass button right */}
-      <div className="flex items-center">
-        <div className="w-20 shrink-0" />
+      {/* Row 1: Exit (left), direction label (center), Pass button (right).
+          Below: small ready-count line so all players can see progress. */}
+      <div className="flex items-center gap-2">
+        <div className="w-20 shrink-0">
+          <button onClick={onLeave}
+            className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-4 py-2 active:scale-95 transition-all">
+            Exit
+          </button>
+        </div>
         <p className="flex-1 text-center text-base font-bold">
           {DIR_LABEL[currentPass.dir]}
           <span className="text-slate-400 font-normal text-sm"> → {recipientName}</span>
@@ -156,6 +188,11 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
           )}
         </div>
       </div>
+      {!alreadySubmitted && (
+        <p className="text-center text-[11px] text-slate-400 -mt-1">
+          Tap a tile to select · long-press to drag-reorder · {playersReady}/{totalPlayers} ready
+        </p>
+      )}
 
       {/* Row 2: 6-stage pass tracker */}
       <div className="flex items-center justify-center gap-1.5">
@@ -191,10 +228,10 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
             Sort
           </button>
         </div>
-        <div className="flex justify-center">
+        <div className="flex justify-center w-full overflow-x-auto">
           <div
             ref={drag.containerRef}
-            className={`flex flex-wrap gap-1 justify-center pt-3 pb-1 transition-opacity duration-500 ${alreadySubmitted ? 'opacity-40' : 'opacity-100'}`}
+            className={`flex flex-nowrap gap-1 justify-center pt-3 pb-1 transition-opacity duration-500 ${alreadySubmitted ? 'opacity-40' : 'opacity-100'}`}
             style={{ touchAction: drag.dragging ? 'none' : 'auto' }}
             onPointerMove={drag.onMove}
             onPointerUp={drag.onUp}
@@ -211,15 +248,11 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
                 >
                   <div
                     className={isReceived ? 'tile-pop' : undefined}
-                    style={{
-                      outline: isReceived ? '2px solid #34d399' : undefined,
-                      outlineOffset: '2px',
-                      borderRadius: 8,
-                      position: 'relative',
-                    }}
+                    style={{ borderRadius: 8, position: 'relative' }}
                   >
                     <TileComponent
                       tile={tile}
+                      medium
                       selected={!drag.dragging && !alreadySubmitted && selected.has(tile.id)}
                       onClick={() => handleTileClick(tile)}
                     />
@@ -234,14 +267,6 @@ export default function Charleston({ game, gameId, myPlayerId, onLeave }: Props)
             })}
           </div>
         </div>
-      </div>
-
-      {/* Footer: Exit */}
-      <div className="flex justify-end">
-        <button onClick={onLeave}
-          className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-4 py-2 active:scale-95 transition-all">
-          Exit
-        </button>
       </div>
     </div>
   )

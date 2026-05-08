@@ -1,10 +1,16 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { GameState, Tile } from '@/types/game'
+import { ref, update } from 'firebase/database'
+import { getDb } from '@/lib/firebase'
+import { GameState, Tile, ExposedSet } from '@/types/game'
 import TileComponent from './Tile'
-import { drawTile, discardTile, claimDiscard, passClaim, enterClaimMode, exitClaimMode, declareMahjong, declareWallExhausted, swapJoker, resetGame } from '@/lib/gameActions'
+import { drawTile, discardTile, claimDiscard, passClaim, voteNoThanks, enterClaimMode, exitClaimMode, declareMahjong, declareWallExhausted, swapJoker, resetGame } from '@/lib/gameActions'
 import { VERSION } from '@/lib/version'
 import { useTileDrag } from '@/lib/useTileDrag'
+
+const HAND_ORDER_KEY = (gameId: string, playerId: string) => `mahjong_handOrder_${gameId}_${playerId}`
+const ESET_PREFIX = 'eset:'
+const esetId = (set: ExposedSet) => `${ESET_PREFIX}${set.tiles[0]?.id ?? ''}`
 
 const SUIT_ORDER: Record<string, number> = { bam: 0, crak: 1, dot: 2, wind: 3, dragon: 4, flower: 5, joker: 6 }
 const WIND_ORDER: Record<string, number> = { E: 0, S: 1, W: 2, N: 3 }
@@ -41,12 +47,16 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const [showClaim, setShowClaim] = useState(false)
   const [claimMode, setClaimMode] = useState(false)
   const [claimSelection, setClaimSelection] = useState<string[]>([])
+  const [drawing, setDrawing] = useState(false)
+  const [discardingId, setDiscardingId] = useState<string | null>(null)
+  const [showExitConfirm, setShowExitConfirm] = useState(false)
   const prevHandRef = useRef<string[]>([])
   const claimModeRef = useRef(false)
   claimModeRef.current = claimMode
   const justClaimedRef = useRef(false)
   const pauseStartRef = useRef<number | null>(null)
   const localExpiresAtRef = useRef<number>(0)
+  const myAreaOrderInitRef = useRef(false)
 
   const me = game.players[myPlayerId]
   const isMyTurn = game.currentTurn === myPlayerId
@@ -69,20 +79,60 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
 
   const drag = useTileDrag(myAreaOrder, setMyAreaOrder)
 
-  // Sync myAreaOrder: hand tiles + exposed set slots as a unified list
+  // Sync myAreaOrder: hand tiles + exposed set slots as a unified list.
+  // Exposed sets are keyed by their first-tile id (stable across reorder writes).
   useEffect(() => {
     const tileIds = (me?.hand ?? []).map(t => t.id)
-    const count = me?.exposedSets?.length ?? 0
-    const sIds = Array.from({ length: count }, (_, i) => `eset-${i}`)
+    const sIds = (me?.exposedSets ?? []).map(esetId)
     const allValid = new Set([...tileIds, ...sIds])
     setMyAreaOrder(prev => {
-      const retained = prev.filter(id => allValid.has(id))
+      // First mount: seed from localStorage to preserve order across the
+      // charleston→playing transition and across page reloads.
+      let seed = prev
+      if (!myAreaOrderInitRef.current && prev.length === 0 && typeof window !== 'undefined') {
+        myAreaOrderInitRef.current = true
+        try {
+          const saved = window.localStorage.getItem(HAND_ORDER_KEY(gameId, myPlayerId))
+          if (saved) seed = JSON.parse(saved) as string[]
+        } catch {}
+      }
+      const retained = seed.filter(id => allValid.has(id))
       const retainedSet = new Set(retained)
       const newSIds = sIds.filter(id => !retainedSet.has(id))
       const newTIds = tileIds.filter(id => !retainedSet.has(id))
       return [...retained, ...newSIds, ...newTIds]
     })
-  }, [(me?.hand ?? []).map(t => t.id).join(','), me?.exposedSets?.length])
+  }, [(me?.hand ?? []).map(t => t.id).join(','), (me?.exposedSets ?? []).map(esetId).join(','), gameId, myPlayerId])
+
+  // Persist hand-order locally so it survives across reloads and the
+  // charleston→playing transition.
+  useEffect(() => {
+    if (myAreaOrder.length === 0) return
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(HAND_ORDER_KEY(gameId, myPlayerId), JSON.stringify(myAreaOrder))
+    } catch {}
+  }, [myAreaOrder, gameId, myPlayerId])
+
+  // Sync exposed-set order to opponents: when the user reorders eset entries
+  // in their bottom strip, write the reordered exposedSets array to Firebase
+  // so all clients see the new order.
+  useEffect(() => {
+    const sets = me?.exposedSets ?? []
+    if (sets.length < 2) return
+    const desiredEsetIds = myAreaOrder.filter(id => id.startsWith(ESET_PREFIX))
+    if (desiredEsetIds.length !== sets.length) return
+    // Build the reordered array
+    const byId = new Map(sets.map(s => [esetId(s), s]))
+    const reordered = desiredEsetIds.map(id => byId.get(id)).filter(Boolean) as ExposedSet[]
+    if (reordered.length !== sets.length) return
+    const currentKey = sets.map(esetId).join('|')
+    const nextKey = reordered.map(esetId).join('|')
+    if (currentKey === nextKey) return
+    update(ref(getDb()), {
+      [`games/${gameId}/players/${myPlayerId}/exposedSets`]: reordered,
+    })
+  }, [myAreaOrder, me?.exposedSets, gameId, myPlayerId])
 
   // Detect drawn tile (hand grows by 1)
   useEffect(() => {
@@ -164,8 +214,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   const opponents = playerIds.filter(id => id !== myPlayerId)
 
   function sortHand() {
-    const count = me?.exposedSets?.length ?? 0
-    const sIds = Array.from({ length: count }, (_, i) => `eset-${i}`)
+    const sIds = (me?.exposedSets ?? []).map(esetId)
     const sortedTileIds = [...(me?.hand ?? [])].sort(tileSort).map(t => t.id)
     setMyAreaOrder([...sIds, ...sortedTileIds])
   }
@@ -184,15 +233,27 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
   }
 
   async function handleDraw() {
-    await drawTile(gameId, myPlayerId)
-    setDrewThisTurn(true)
+    if (drawing) return
+    setDrawing(true)
+    try {
+      await drawTile(gameId, myPlayerId)
+      setDrewThisTurn(true)
+    } finally {
+      setDrawing(false)
+    }
   }
 
   async function handleDiscard() {
-    if (!selectedTile) return
-    await discardTile(gameId, myPlayerId, selectedTile)
-    setSelectedTile(null)
-    setDrewThisTurn(false)
+    if (!selectedTile || discardingId) return
+    const tile = selectedTile
+    setDiscardingId(tile.id)
+    try {
+      await discardTile(gameId, myPlayerId, tile)
+      setSelectedTile(null)
+      setDrewThisTurn(false)
+    } finally {
+      setDiscardingId(null)
+    }
   }
 
   async function handleEnterClaimMode() {
@@ -319,6 +380,12 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
     ? game.players[pending.fromPlayerId]?.nickname
     : game.lastDiscard ? game.players[game.lastDiscard.fromPlayerId]?.nickname : null
 
+  const myNoThanksVote = !!pending?.noThanksBy?.[myPlayerId]
+  const noThanksCount = Object.keys(pending?.noThanksBy ?? {}).length
+  const eligibleVoters = pending
+    ? Object.keys(game.players).filter(pid => pid !== pending.fromPlayerId).length
+    : 0
+
   function renderActionPanel() {
     if (showClaim && canClaim) {
       if (claimMode) {
@@ -341,21 +408,35 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           </button>
         )
       }
+      if (myNoThanksVote) {
+        return (
+          <button disabled className={BTN_MUTED + ' opacity-60 text-xs'}>
+            Waiting · {noThanksCount}/{eligibleVoters} passed
+          </button>
+        )
+      }
       return (
         <>
           <button onClick={handleEnterClaimMode} className={BTN_CALL + ' btn-pulse-amber'}>Wait · Call</button>
-          <button onClick={() => { setShowClaim(false); passClaim(gameId) }} className={BTN_OUTLINE}>No Thanks</button>
+          <button onClick={() => voteNoThanks(gameId, myPlayerId)} className={BTN_OUTLINE}>
+            No Thanks {noThanksCount > 0 ? `(${noThanksCount}/${eligibleVoters})` : ''}
+          </button>
         </>
       )
     }
     if (isMyTurn && !drewThisTurn) {
-      return <button onClick={handleDraw} className={BTN_DRAW + ' btn-pulse-green'}>Draw</button>
+      return (
+        <button onClick={handleDraw} disabled={drawing}
+          className={drawing ? BTN_MUTED + ' opacity-40 cursor-not-allowed' : BTN_DRAW + ' btn-pulse-green'}>
+          {drawing ? 'Drawing…' : 'Draw'}
+        </button>
+      )
     }
     if (isMyTurn && drewThisTurn) {
       return (
-        <button onClick={handleDiscard} disabled={!selectedTile}
-          className={selectedTile ? BTN_DISCARD + ' btn-pulse-blue' : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
-          Discard
+        <button onClick={handleDiscard} disabled={!selectedTile || !!discardingId}
+          className={selectedTile && !discardingId ? BTN_DISCARD + ' btn-pulse-blue' : BTN_MUTED + ' opacity-40 cursor-not-allowed'}>
+          {discardingId ? 'Discarding…' : 'Discard'}
         </button>
       )
     }
@@ -377,21 +458,21 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             const opp = game.players[pid]
             const isOppTurn = game.currentTurn === pid
             const isCalling = pending?.claimingPlayerId === pid
-            const jokerSets = (opp.exposedSets ?? []).filter(s => s.tiles.some(t => t.isJoker))
-            const otherSets = (opp.exposedSets ?? []).filter(s => !s.tiles.some(t => t.isJoker))
-            const expEntries = [...jokerSets, ...otherSets].flatMap((set) =>
-              set.tiles.map((t, ti) => ({ t, set, origSi: (opp.exposedSets ?? []).indexOf(set), ti }))
+            // Render exposed sets in the array order the owner chose (drag-reorder
+            // propagates from owner's bottom strip via Firebase).
+            const expEntries = (opp.exposedSets ?? []).flatMap((set, si) =>
+              set.tiles.map((t, ti) => ({ t, set, origSi: si, ti }))
             )
 
             return (
               <div key={pid} className={`rounded px-1 py-0.5 shrink-0 border ${isOppTurn ? 'bg-yellow-600/20 border-yellow-500/60' : isCalling ? 'bg-amber-900/20 border-amber-500/40' : 'bg-black/20 border-transparent'}`}>
                 <div className="flex items-center gap-0.5 overflow-x-auto">
-                  <span className="text-xs font-semibold shrink-0 w-14 truncate">
+                  <span className="text-[10px] font-semibold shrink-0 w-10 truncate leading-tight">
                     {opp.nickname}{isCalling ? ' 🤔' : ''}
                   </span>
-                  {/* Face-down tiles */}
+                  {/* Face-down tiles — tiny variant so 13+ fit on a phone landscape row */}
                   {Array.from({ length: Math.min(opp.hand?.length ?? 0, 20) }).map((_, i) => (
-                    <TileComponent key={i} tile={{ id: `fd-${pid}-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown small />
+                    <TileComponent key={i} tile={{ id: `fd-${pid}-${i}`, suit: 'bam', value: 1, isJoker: false, label: '' }} faceDown tiny />
                   ))}
                   {/* Divider between hidden and exposed */}
                   {expEntries.length > 0 && (
@@ -490,10 +571,10 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
           onPointerCancel={drag.onCancel}
         >
           {drag.displayIds.map(id => {
-            // Exposed set block
-            if (id.startsWith('eset-')) {
-              const si = parseInt(id.replace('eset-', ''))
-              const set = (me?.exposedSets ?? [])[si]
+            // Exposed set block — id is `eset:${firstTileId}` (stable across reorder writes)
+            if (id.startsWith(ESET_PREFIX)) {
+              const firstId = id.slice(ESET_PREFIX.length)
+              const set = (me?.exposedSets ?? []).find(s => s.tiles[0]?.id === firstId)
               if (!set) return null
               return (
                 <div
@@ -506,7 +587,7 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
                   <span className="absolute top-0.5 left-0 right-0 text-center text-[7px] text-amber-300 font-bold leading-none tracking-wide">
                     {set.claimType.toUpperCase()}
                   </span>
-                  {set.tiles.map((t, ti) => <TileComponent key={`${si}-${ti}`} tile={t} medium />)}
+                  {set.tiles.map((t, ti) => <TileComponent key={`${id}-${ti}`} tile={t} medium />)}
                 </div>
               )
             }
@@ -551,11 +632,33 @@ export default function GameBoard({ game, gameId, myPlayerId, onLeave }: Props) 
             className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center"
           >Sort</button>
           <button
-            onClick={onLeave}
+            onClick={() => setShowExitConfirm(true)}
             className="bg-slate-600 hover:bg-slate-500 text-white text-sm font-semibold rounded-lg px-3 py-2.5 active:scale-95 transition-all text-center"
           >Exit</button>
         </div>
       </div>
+
+      {/* Exit confirmation */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setShowExitConfirm(false)}>
+          <div className="bg-[#152030] rounded-xl p-5 max-w-sm w-full border border-slate-700" onClick={e => e.stopPropagation()}>
+            <h3 className="text-white font-bold text-base mb-2">Leave game?</h3>
+            <p className="text-slate-300 text-sm mb-4">
+              Your hand will be saved. Open the same link to rejoin and pick up where you left off.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setShowExitConfirm(false)}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold rounded-lg py-2 active:scale-95">
+                Stay
+              </button>
+              <button onClick={() => { setShowExitConfirm(false); onLeave() }}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-black text-sm font-bold rounded-lg py-2 active:scale-95">
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Discards modal */}
       {showDiscards && (
