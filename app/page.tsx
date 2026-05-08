@@ -60,7 +60,7 @@ export default function Home() {
           <div className="text-5xl sm:text-4xl mb-2">🀄</div>
           <h1 className="text-2xl sm:text-xl font-bold text-white">American Mahjong</h1>
           <p className="text-emerald-400 text-sm mt-1">Play with friends, anywhere</p>
-          <p className="text-slate-700 text-xs mt-1">{VERSION}</p>
+          <p className="text-slate-400 text-xs mt-1">{VERSION}</p>
         </div>
 
         {/* Forms */}
@@ -107,7 +107,7 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                <p className="text-slate-100 text-sm mt-1.5">
+                <p className="text-slate-300 text-xs mt-1.5">
                   {botCount === 0
                     ? 'Share the link with up to 3 friends'
                     : botCount === 3
