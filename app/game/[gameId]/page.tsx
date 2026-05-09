@@ -3,7 +3,7 @@ import { use, useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { GameState } from '@/types/game'
 import { subscribeToGame, joinGame, dealGame, leaveGame, botTakeTurn, botClaimAndDiscard, submitCharlestionPass, voteNoThanks } from '@/lib/gameActions'
-import { botPickCharleston, botDecideClaim, buildVisibility } from '@/lib/botLogic'
+import { pickCharleston, decideClaim, buildVisibility } from '@/lib/botDifficulty'
 
 const PLAYER_KEY = (gameId: string) => `mahjong_player_${gameId}`
 const NICK_KEY = (gameId: string) => `mahjong_nickname_${gameId}`
@@ -91,7 +91,8 @@ export default function GamePage({ params }: Props) {
         botActed.current.add(key)
         const allDiscards = Object.values(game.players).flatMap(pl => pl.discards ?? [])
         const vis = buildVisibility(allDiscards, [])
-        const selection = botPickCharleston(p.hand, p.exposedSets ?? [], vis)
+        const difficulty = game.botDifficulty ?? 'moderate'
+        const selection = pickCharleston(p.hand, p.exposedSets ?? [], vis, gameId, botId, difficulty)
         setTimeout(() => submitCharlestionPass(gameId, botId, selection), 600 + Math.random() * 600)
       })
       return
@@ -111,7 +112,8 @@ export default function GamePage({ params }: Props) {
         const botExposed = game.players[botId]?.exposedSets ?? []
         const allDiscards = Object.values(game.players).flatMap(pl => pl.discards ?? [])
         const visForClaim = buildVisibility(allDiscards, [])
-        const claimType = botDecideClaim(hand, botExposed, pending.tile, visForClaim)
+        const difficulty = game.botDifficulty ?? 'moderate'
+        const claimType = decideClaim(hand, botExposed, pending.tile, visForClaim, gameId, botId, difficulty)
         if (!claimType) {
           declinedBots.push(botId)
           continue

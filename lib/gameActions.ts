@@ -2,7 +2,7 @@ import { ref, set, update, get, onValue, off } from 'firebase/database'
 import { getDb } from './firebase'
 import { GameState, Tile, ExposedSet, CharlestionDirection, BotDifficulty } from '@/types/game'
 import { buildDeck, shuffleDeck, dealHands } from './tiles'
-import { botPickDiscard, botDecideClaim, botPickExposeSet, botCheckWin, buildVisibility } from './botLogic'
+import { pickDiscard, decideClaim, botPickExposeSet, botCheckWin, buildVisibility, clearBotBrain } from './botDifficulty'
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -378,7 +378,8 @@ export async function botTakeTurn(gameId: string, botId: string) {
     return
   }
 
-  const toDiscard = botPickDiscard(newHand, botExposed, vis)
+  const difficulty = game.botDifficulty ?? 'moderate'
+  const toDiscard = pickDiscard(newHand, botExposed, vis, gameId, botId, difficulty, game.players)
   const finalHand = newHand.filter(t => t.id !== toDiscard.id)
   const newDiscards = [...(game.players[botId].discards ?? []), toDiscard]
 
@@ -432,7 +433,8 @@ export async function botClaimAndDiscard(gameId: string, botId: string): Promise
     .flatMap(([, p]) => (p.exposedSets ?? []).flatMap((s: ExposedSet) => s.tiles))
   const vis = buildVisibility(allDiscards, opponentExposed)
 
-  const claimType = botDecideClaim(hand, botExposed, discardedTile, vis)
+  const difficulty = game.botDifficulty ?? 'moderate'
+  const claimType = decideClaim(hand, botExposed, discardedTile, vis, gameId, botId, difficulty)
   if (!claimType) return false
 
   if (claimType === 'mahjong') {
@@ -463,7 +465,8 @@ export async function botClaimAndDiscard(gameId: string, botId: string): Promise
     return true
   }
 
-  const toDiscard = botPickDiscard(game2.players[botId].hand, newBotExposed2, vis2)
+  const difficulty2 = game2.botDifficulty ?? 'moderate'
+  const toDiscard = pickDiscard(game2.players[botId].hand, newBotExposed2, vis2, gameId, botId, difficulty2, game2.players)
   await discardTile(gameId, botId, toDiscard)
   return true
 }
@@ -514,6 +517,9 @@ export async function resetGame(gameId: string) {
   const snap = await get(gameRef(gameId))
   const game = snap.val() as GameState
   const playerIds = Object.keys(game.players)
+
+  // Drop cached bot brains so the rematch picks fresh targets.
+  clearBotBrain(gameId)
 
   const updates: Record<string, unknown> = {
     [`games/${gameId}/status`]: 'waiting',
